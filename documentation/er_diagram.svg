@@ -1,0 +1,300 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1150 820" width="100%" height="100%" style="background:#ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <style>
+      .entity-title { font-weight: bold; font-size: 13px; fill: #ffffff; }
+      .field-name { font-size: 11px; fill: #1e293b; font-family: 'SF Mono', Menlo, Consolas, monospace; }
+      .field-type { font-size: 10px; fill: #64748b; font-family: 'SF Mono', Menlo, Consolas, monospace; }
+      .pk { fill: #b45309; font-weight: bold; font-size: 9px; }
+      .fk { fill: #0369a1; font-weight: bold; font-size: 9px; }
+      .relation-line { stroke: #64748b; stroke-width: 1.8; fill: none; }
+      .rel-label { font-size: 10px; fill: #475569; background: #ffffff; font-style: italic; }
+    </style>
+  </defs>
+
+  <rect width="1150" height="820" fill="#f8fafc" rx="8" />
+  <text x="30" y="38" font-size="20" font-weight="700" fill="#0f172a">Entity Relationship Diagram (ERD) — Supabase PostgreSQL</text>
+  <text x="30" y="58" font-size="12" fill="#64748b">Hospital Queue, Bed Availability &amp; Admission Management System</text>
+
+  <!-- ================= ENTITIES ================= -->
+
+  <!-- 1. CITY (x=40, y=90, w=180, h=90) -->
+  <g transform="translate(40, 90)">
+    <rect width="180" height="85" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" rx="6" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.04))" />
+    <path d="M 0 6 A 6 6 0 0 1 6 0 L 174 0 A 6 6 0 0 1 180 6 L 180 26 L 0 26 Z" fill="#3b82f6" />
+    <text x="90" y="18" text-anchor="middle" class="entity-title">CITY</text>
+    <text x="12" y="46" class="field-name">city_id</text>
+    <text x="100" y="46" class="field-type">int</text>
+    <rect x="145" y="37" width="22" height="12" fill="#fef3c7" rx="3" />
+    <text x="156" y="46" text-anchor="middle" class="pk">PK</text>
+    <line x1="8" y1="55" x2="172" y2="55" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="70" class="field-name">city_name</text>
+    <text x="100" y="70" class="field-type">string</text>
+  </g>
+
+  <!-- 2. HOSPITAL (x=300, y=90, w=210, h=160) -->
+  <g transform="translate(300, 90)">
+    <rect width="210" height="150" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" rx="6" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.04))" />
+    <path d="M 0 6 A 6 6 0 0 1 6 0 L 204 0 A 6 6 0 0 1 210 6 L 210 26 L 0 26 Z" fill="#2563eb" />
+    <text x="105" y="18" text-anchor="middle" class="entity-title">HOSPITAL</text>
+    <text x="12" y="46" class="field-name">hospital_id</text>
+    <text x="110" y="46" class="field-type">int</text>
+    <rect x="175" y="37" width="22" height="12" fill="#fef3c7" rx="3" />
+    <text x="186" y="46" text-anchor="middle" class="pk">PK</text>
+    <line x1="8" y1="54" x2="202" y2="54" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="68" class="field-name">city_id</text>
+    <text x="110" y="68" class="field-type">int</text>
+    <rect x="175" y="59" width="22" height="12" fill="#e0f2fe" rx="3" />
+    <text x="186" y="68" text-anchor="middle" class="fk">FK</text>
+    <line x1="8" y1="76" x2="202" y2="76" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="90" class="field-name">hospital_name</text>
+    <text x="110" y="90" class="field-type">string</text>
+    <line x1="8" y1="98" x2="202" y2="98" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="112" class="field-name">address</text>
+    <text x="110" y="112" class="field-type">string</text>
+    <line x1="8" y1="120" x2="202" y2="120" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="134" class="field-name">hospital_type</text>
+    <text x="110" y="134" class="field-type">string</text>
+  </g>
+
+  <!-- 3. DEPARTMENT (x=600, y=90, w=200, h=110) -->
+  <g transform="translate(600, 90)">
+    <rect width="200" height="105" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" rx="6" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.04))" />
+    <path d="M 0 6 A 6 6 0 0 1 6 0 L 194 0 A 6 6 0 0 1 200 6 L 200 26 L 0 26 Z" fill="#0284c7" />
+    <text x="100" y="18" text-anchor="middle" class="entity-title">DEPARTMENT</text>
+    <text x="12" y="46" class="field-name">department_id</text>
+    <text x="115" y="46" class="field-type">int</text>
+    <rect x="165" y="37" width="22" height="12" fill="#fef3c7" rx="3" />
+    <text x="176" y="46" text-anchor="middle" class="pk">PK</text>
+    <line x1="8" y1="54" x2="192" y2="54" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="68" class="field-name">hospital_id</text>
+    <text x="115" y="68" class="field-type">int</text>
+    <rect x="165" y="59" width="22" height="12" fill="#e0f2fe" rx="3" />
+    <text x="176" y="68" text-anchor="middle" class="fk">FK</text>
+    <line x1="8" y1="76" x2="192" y2="76" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="90" class="field-name">department_name</text>
+    <text x="115" y="90" class="field-type">string</text>
+  </g>
+
+  <!-- 4. OPD_QUEUE (x=880, y=90, w=210, h=130) -->
+  <g transform="translate(880, 90)">
+    <rect width="210" height="125" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" rx="6" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.04))" />
+    <path d="M 0 6 A 6 6 0 0 1 6 0 L 204 0 A 6 6 0 0 1 210 6 L 210 26 L 0 26 Z" fill="#0369a1" />
+    <text x="105" y="18" text-anchor="middle" class="entity-title">OPD_QUEUE</text>
+    <text x="12" y="46" class="field-name">queue_id</text>
+    <text x="115" y="46" class="field-type">int</text>
+    <rect x="175" y="37" width="22" height="12" fill="#fef3c7" rx="3" />
+    <text x="186" y="46" text-anchor="middle" class="pk">PK</text>
+    <line x1="8" y1="54" x2="202" y2="54" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="68" class="field-name">department_id</text>
+    <text x="115" y="68" class="field-type">int</text>
+    <rect x="175" y="59" width="22" height="12" fill="#e0f2fe" rx="3" />
+    <text x="186" y="68" text-anchor="middle" class="fk">FK</text>
+    <line x1="8" y1="76" x2="202" y2="76" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="90" class="field-name">queue_date</text>
+    <text x="115" y="90" class="field-type">date</text>
+    <line x1="8" y1="98" x2="202" y2="98" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="112" class="field-name">status</text>
+    <text x="115" y="112" class="field-type">string</text>
+  </g>
+
+  <!-- 5. QUEUE_ENTRY (x=880, y=320, w=220, h=195) -->
+  <g transform="translate(880, 320)">
+    <rect width="220" height="195" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" rx="6" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.04))" />
+    <path d="M 0 6 A 6 6 0 0 1 6 0 L 214 0 A 6 6 0 0 1 220 6 L 220 26 L 0 26 Z" fill="#0d9488" />
+    <text x="110" y="18" text-anchor="middle" class="entity-title">QUEUE_ENTRY</text>
+    <text x="12" y="46" class="field-name">entry_id</text>
+    <text x="115" y="46" class="field-type">int</text>
+    <rect x="185" y="37" width="22" height="12" fill="#fef3c7" rx="3" />
+    <text x="196" y="46" text-anchor="middle" class="pk">PK</text>
+    <line x1="8" y1="54" x2="212" y2="54" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="68" class="field-name">queue_id</text>
+    <text x="115" y="68" class="field-type">int</text>
+    <rect x="185" y="59" width="22" height="12" fill="#e0f2fe" rx="3" />
+    <text x="196" y="68" text-anchor="middle" class="fk">FK</text>
+    <line x1="8" y1="76" x2="212" y2="76" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="90" class="field-name">patient_id</text>
+    <text x="115" y="90" class="field-type">int</text>
+    <rect x="185" y="81" width="22" height="12" fill="#e0f2fe" rx="3" />
+    <text x="196" y="90" text-anchor="middle" class="fk">FK</text>
+    <line x1="8" y1="98" x2="212" y2="98" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="112" class="field-name">token_number</text>
+    <text x="115" y="112" class="field-type">int</text>
+    <line x1="8" y1="120" x2="212" y2="120" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="134" class="field-name">priority</text>
+    <text x="115" y="134" class="field-type">int</text>
+    <line x1="8" y1="142" x2="212" y2="142" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="156" class="field-name">status</text>
+    <text x="115" y="156" class="field-type">string</text>
+    <line x1="8" y1="164" x2="212" y2="164" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="178" class="field-name">joined_at</text>
+    <text x="115" y="178" class="field-type">timestamp</text>
+  </g>
+
+  <!-- 6. PATIENT (x=530, y=340, w=210, h=150) -->
+  <g transform="translate(530, 340)">
+    <rect width="210" height="150" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" rx="6" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.04))" />
+    <path d="M 0 6 A 6 6 0 0 1 6 0 L 204 0 A 6 6 0 0 1 210 6 L 210 26 L 0 26 Z" fill="#059669" />
+    <text x="105" y="18" text-anchor="middle" class="entity-title">PATIENT</text>
+    <text x="12" y="46" class="field-name">patient_id</text>
+    <text x="115" y="46" class="field-type">int</text>
+    <rect x="175" y="37" width="22" height="12" fill="#fef3c7" rx="3" />
+    <text x="186" y="46" text-anchor="middle" class="pk">PK</text>
+    <line x1="8" y1="54" x2="202" y2="54" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="68" class="field-name">hospital_id</text>
+    <text x="115" y="68" class="field-type">int</text>
+    <rect x="175" y="59" width="22" height="12" fill="#e0f2fe" rx="3" />
+    <text x="186" y="68" text-anchor="middle" class="fk">FK</text>
+    <line x1="8" y1="76" x2="202" y2="76" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="90" class="field-name">name</text>
+    <text x="115" y="90" class="field-type">string</text>
+    <line x1="8" y1="98" x2="202" y2="98" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="112" class="field-name">age</text>
+    <text x="115" y="112" class="field-type">int</text>
+    <line x1="8" y1="120" x2="202" y2="120" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="134" class="field-name">contact_number</text>
+    <text x="115" y="134" class="field-type">string</text>
+  </g>
+
+  <!-- 7. BED (x=90, y=560, w=200, h=150) -->
+  <g transform="translate(90, 560)">
+    <rect width="200" height="150" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" rx="6" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.04))" />
+    <path d="M 0 6 A 6 6 0 0 1 6 0 L 194 0 A 6 6 0 0 1 200 6 L 200 26 L 0 26 Z" fill="#7c3aed" />
+    <text x="100" y="18" text-anchor="middle" class="entity-title">BED</text>
+    <text x="12" y="46" class="field-name">bed_id</text>
+    <text x="105" y="46" class="field-type">int</text>
+    <rect x="165" y="37" width="22" height="12" fill="#fef3c7" rx="3" />
+    <text x="176" y="46" text-anchor="middle" class="pk">PK</text>
+    <line x1="8" y1="54" x2="192" y2="54" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="68" class="field-name">hospital_id</text>
+    <text x="105" y="68" class="field-type">int</text>
+    <rect x="165" y="59" width="22" height="12" fill="#e0f2fe" rx="3" />
+    <text x="176" y="68" text-anchor="middle" class="fk">FK</text>
+    <line x1="8" y1="76" x2="192" y2="76" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="90" class="field-name">ward</text>
+    <text x="105" y="90" class="field-type">string</text>
+    <line x1="8" y1="98" x2="192" y2="98" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="112" class="field-name">bed_type</text>
+    <text x="105" y="112" class="field-type">string</text>
+    <line x1="8" y1="120" x2="192" y2="120" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="134" class="field-name">status</text>
+    <text x="105" y="134" class="field-type">string</text>
+  </g>
+
+  <!-- 8. ADMISSION (x=450, y=560, w=230, h=195) -->
+  <g transform="translate(450, 560)">
+    <rect width="230" height="195" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" rx="6" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.04))" />
+    <path d="M 0 6 A 6 6 0 0 1 6 0 L 224 0 A 6 6 0 0 1 230 6 L 230 26 L 0 26 Z" fill="#9333ea" />
+    <text x="115" y="18" text-anchor="middle" class="entity-title">ADMISSION</text>
+    <text x="12" y="46" class="field-name">admission_id</text>
+    <text x="120" y="46" class="field-type">int</text>
+    <rect x="195" y="37" width="22" height="12" fill="#fef3c7" rx="3" />
+    <text x="206" y="46" text-anchor="middle" class="pk">PK</text>
+    <line x1="8" y1="54" x2="222" y2="54" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="68" class="field-name">patient_id</text>
+    <text x="120" y="68" class="field-type">int</text>
+    <rect x="195" y="59" width="22" height="12" fill="#e0f2fe" rx="3" />
+    <text x="206" y="68" text-anchor="middle" class="fk">FK</text>
+    <line x1="8" y1="76" x2="222" y2="76" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="90" class="field-name">hospital_id</text>
+    <text x="120" y="90" class="field-type">int</text>
+    <rect x="195" y="81" width="22" height="12" fill="#e0f2fe" rx="3" />
+    <text x="206" y="90" text-anchor="middle" class="fk">FK</text>
+    <line x1="8" y1="98" x2="222" y2="98" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="112" class="field-name">bed_id</text>
+    <text x="120" y="112" class="field-type">int</text>
+    <rect x="195" y="103" width="22" height="12" fill="#e0f2fe" rx="3" />
+    <text x="206" y="112" text-anchor="middle" class="fk">FK</text>
+    <line x1="8" y1="120" x2="222" y2="120" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="134" class="field-name">admitted_at</text>
+    <text x="120" y="134" class="field-type">timestamp</text>
+    <line x1="8" y1="142" x2="222" y2="142" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="156" class="field-name">discharged_at</text>
+    <text x="120" y="156" class="field-type">timestamp</text>
+    <line x1="8" y1="164" x2="222" y2="164" stroke="#f1f5f9" stroke-width="1" />
+    <text x="12" y="178" class="field-name">status</text>
+    <text x="120" y="178" class="field-type">string</text>
+  </g>
+
+  <!-- ================= RELATIONSHIPS ================= -->
+
+  <!-- CITY (1) -> HOSPITAL (N) -->
+  <path d="M 220 135 L 300 135" class="relation-line" />
+  <circle cx="225" cy="135" r="3" fill="#64748b" />
+  <line x1="290" y1="127" x2="300" y2="135" stroke="#64748b" stroke-width="1.8" />
+  <line x1="290" y1="143" x2="300" y2="135" stroke="#64748b" stroke-width="1.8" />
+  <line x1="285" y1="127" x2="285" y2="143" stroke="#64748b" stroke-width="1.8" />
+  <text x="260" y="125" class="rel-label" text-anchor="middle">contains</text>
+
+  <!-- HOSPITAL (1) -> DEPARTMENT (N) -->
+  <path d="M 510 135 L 600 135" class="relation-line" />
+  <circle cx="516" cy="135" r="3" fill="#64748b" />
+  <line x1="590" y1="127" x2="600" y2="135" stroke="#64748b" stroke-width="1.8" />
+  <line x1="590" y1="143" x2="600" y2="135" stroke="#64748b" stroke-width="1.8" />
+  <line x1="585" y1="127" x2="585" y2="143" stroke="#64748b" stroke-width="1.8" />
+  <text x="555" y="125" class="rel-label" text-anchor="middle">has</text>
+
+  <!-- DEPARTMENT (1) -> OPD_QUEUE (N) -->
+  <path d="M 800 135 L 880 135" class="relation-line" />
+  <circle cx="806" cy="135" r="3" fill="#64748b" />
+  <line x1="870" y1="127" x2="880" y2="135" stroke="#64748b" stroke-width="1.8" />
+  <line x1="870" y1="143" x2="880" y2="135" stroke="#64748b" stroke-width="1.8" />
+  <line x1="865" y1="127" x2="865" y2="143" stroke="#64748b" stroke-width="1.8" />
+  <text x="840" y="125" class="rel-label" text-anchor="middle">operates</text>
+
+  <!-- OPD_QUEUE (1) -> QUEUE_ENTRY (N) -->
+  <path d="M 985 215 L 985 320" class="relation-line" />
+  <circle cx="985" cy="221" r="3" fill="#64748b" />
+  <line x1="977" y1="310" x2="985" y2="320" stroke="#64748b" stroke-width="1.8" />
+  <line x1="993" y1="310" x2="985" y2="320" stroke="#64748b" stroke-width="1.8" />
+  <line x1="977" y1="305" x2="993" y2="305" stroke="#64748b" stroke-width="1.8" />
+  <text x="940" y="270" class="rel-label">contains</text>
+
+  <!-- PATIENT (1) -> QUEUE_ENTRY (N) -->
+  <path d="M 740 400 L 880 400" class="relation-line" />
+  <circle cx="746" cy="400" r="3" fill="#64748b" />
+  <line x1="870" y1="392" x2="880" y2="400" stroke="#64748b" stroke-width="1.8" />
+  <line x1="870" y1="408" x2="880" y2="400" stroke="#64748b" stroke-width="1.8" />
+  <line x1="865" y1="392" x2="865" y2="408" stroke="#64748b" stroke-width="1.8" />
+  <text x="810" y="392" class="rel-label" text-anchor="middle">joins</text>
+
+  <!-- HOSPITAL (1) -> PATIENT (N) -->
+  <path d="M 405 240 L 405 380 L 530 380" class="relation-line" />
+  <circle cx="405" cy="246" r="3" fill="#64748b" />
+  <line x1="520" y1="372" x2="530" y2="380" stroke="#64748b" stroke-width="1.8" />
+  <line x1="520" y1="388" x2="530" y2="380" stroke="#64748b" stroke-width="1.8" />
+  <line x1="515" y1="372" x2="515" y2="388" stroke="#64748b" stroke-width="1.8" />
+  <text x="445" y="372" class="rel-label">registers</text>
+
+  <!-- HOSPITAL (1) -> BED (N) -->
+  <path d="M 330 240 L 330 620 L 290 620" class="relation-line" />
+  <circle cx="330" cy="246" r="3" fill="#64748b" />
+  <line x1="298" y1="612" x2="290" y2="620" stroke="#64748b" stroke-width="1.8" />
+  <line x1="298" y1="628" x2="290" y2="620" stroke="#64748b" stroke-width="1.8" />
+  <line x1="303" y1="612" x2="303" y2="628" stroke="#64748b" stroke-width="1.8" />
+  <text x="338" y="470" class="rel-label">manages</text>
+
+  <!-- BED (1) -> ADMISSION (N) -->
+  <path d="M 290 650 L 450 650" class="relation-line" />
+  <circle cx="296" cy="650" r="3" fill="#64748b" />
+  <line x1="440" y1="642" x2="450" y2="650" stroke="#64748b" stroke-width="1.8" />
+  <line x1="440" y1="658" x2="450" y2="650" stroke="#64748b" stroke-width="1.8" />
+  <line x1="435" y1="642" x2="435" y2="658" stroke="#64748b" stroke-width="1.8" />
+  <text x="365" y="642" class="rel-label" text-anchor="middle">assigned_to</text>
+
+  <!-- PATIENT (1) -> ADMISSION (N) -->
+  <path d="M 580 490 L 580 560" class="relation-line" />
+  <circle cx="580" cy="496" r="3" fill="#64748b" />
+  <line x1="572" y1="550" x2="580" y2="560" stroke="#64748b" stroke-width="1.8" />
+  <line x1="588" y1="550" x2="580" y2="560" stroke="#64748b" stroke-width="1.8" />
+  <line x1="572" y1="545" x2="588" y2="545" stroke="#64748b" stroke-width="1.8" />
+  <text x="590" y="525" class="rel-label">receives</text>
+
+  <!-- HOSPITAL (1) -> ADMISSION (N) -->
+  <path d="M 370 240 L 370 690 L 450 690" class="relation-line" />
+  <circle cx="370" cy="246" r="3" fill="#64748b" />
+  <line x1="440" y1="682" x2="450" y2="690" stroke="#64748b" stroke-width="1.8" />
+  <line x1="440" y1="698" x2="450" y2="690" stroke="#64748b" stroke-width="1.8" />
+  <line x1="435" y1="682" x2="435" y2="698" stroke="#64748b" stroke-width="1.8" />
+  <text x="380" y="682" class="rel-label">records</text>
+
+</svg>
