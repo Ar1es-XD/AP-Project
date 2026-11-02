@@ -27,5 +27,11 @@ create table app_user(
      user_id uuid PRIMARY key default gen_random_uuid(),
      email citext unique not null,
      full_name text not null ,
-     password_hash
-)
+     password_hash text not null,
+     is_active boolean not null default true ,
+     failed_logins int not null default 0 ,
+     locked_until timestamptz ,
+     last_login_at timestamptz,
+     created_at timestamptz not null DEFAULT now()
+);
+
