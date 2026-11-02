@@ -1,6 +1,4 @@
 // to list the bed and wards cleanly
-
-
 import React from 'react';
 
 export function Table({ columns, data, emptyMessage = 'No records found.' }) {
@@ -24,8 +22,8 @@ export function Table({ columns, data, emptyMessage = 'No records found.' }) {
               </td>
             </tr>
           ) : (
-            data.map((row, index) => (
-              <tr key={row.id || index} style={{ borderBottom: '1px solid var(--color-border)' }}>
+            data.map((row) => (
+              <tr key={row.id ?? row.code ?? row.bed_number} style={{ borderBottom: '1px solid var(--color-border)' }}>
                 {columns.map((col) => (
                   <td key={col.key} style={{ padding: '0.75rem 1rem', fontSize: '0.875rem', color: 'var(--color-text-primary)' }}>
                     {col.render ? col.render(row[col.key], row) : row[col.key]}

@@ -6,10 +6,11 @@ const STATUS_CONFIG = {
   OCCUPIED: { bg: 'var(--status-occupied-bg)', color: 'var(--status-occupied-text)', label: 'Occupied' },
   MAINTENANCE: { bg: 'var(--status-maintenance-bg)', color: 'var(--status-maintenance-text)', label: 'Maintenance' },
   RESERVED: { bg: 'var(--status-reserved-bg)', color: 'var(--status-reserved-text)', label: 'Reserved' },
+  UNKNOWN: { bg: 'var(--color-bg-surface)', color: 'var(--color-text-muted)', label: 'Unknown' }
 };
 
 export function Badge({ status = 'AVAILABLE' }) {
-  const config = STATUS_CONFIG[status] || STATUS_CONFIG.AVAILABLE;
+  const config = STATUS_CONFIG[status] || STATUS_CONFIG.UNKNOWN;
 
   return (
     <span
@@ -25,7 +26,6 @@ export function Badge({ status = 'AVAILABLE' }) {
         letterSpacing: '0.025em',
       }}
     >
-      {/* Visual icon + text so we never rely on color alone */}
       <span style={{ marginRight: '0.375rem', fontSize: '0.625rem' }}>●</span>
       {config.label}
     </span>

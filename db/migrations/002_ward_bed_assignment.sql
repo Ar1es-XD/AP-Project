@@ -1,5 +1,5 @@
 -- 1. Enums for wards and beds
-CREATE TYPE ward_type AS ENUM ('GENERAL', 'ICU', 'EMERGENCY', 'PEDIATric', 'MATERNITY');
+CREATE TYPE ward_type AS ENUM ('GENERAL', 'ICU', 'EMERGENCY', 'PEDIATRIC', 'MATERNITY');
 CREATE TYPE bed_status AS ENUM ('AVAILABLE', 'OCCUPIED', 'MAINTENANCE', 'RESERVED');
 CREATE TYPE assignment_status AS ENUM ('ACTIVE', 'DISCHARGED', 'TRANSFERRED');
 
@@ -15,30 +15,32 @@ CREATE TABLE ward (
     capacity INTEGER NOT NULL CHECK (capacity > 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (hospital_id, ward_id),
     UNIQUE (hospital_id, code)
 );
 
--- 3. Bed Table (Scoped to Ward and Hospital via composite reference)
+-- 3. Bed Table (Scoped to Ward and Hospital)
 CREATE TABLE bed (
     bed_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     hospital_id UUID NOT NULL REFERENCES hospital(hospital_id) ON DELETE RESTRICT,
-    ward_id UUID NOT NULL REFERENCES ward(ward_id) ON DELETE RESTRICT,
+    ward_id UUID NOT NULL,
     bed_number VARCHAR(20) NOT NULL,
     status bed_status NOT NULL DEFAULT 'AVAILABLE',
     is_isolation BOOLEAN NOT NULL DEFAULT FALSE,
     reserved_until TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (hospital_id, ward_id) REFERENCES ward(hospital_id, ward_id) ON DELETE RESTRICT,
     UNIQUE (ward_id, bed_number)
 );
 CREATE INDEX idx_bed_hospital_status ON bed(hospital_id, status);
 
--- 4. Bed Assignment Table (Tracking patient admissions to beds)
+-- 4. Bed Assignment Table (Tracking patient admissions)
 CREATE TABLE bed_assignment (
     assignment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     hospital_id UUID NOT NULL REFERENCES hospital(hospital_id) ON DELETE RESTRICT,
     bed_id UUID NOT NULL REFERENCES bed(bed_id) ON DELETE RESTRICT,
-    patient_id UUID NOT NULL, -- references patient table from 001/003
+    patient_id UUID NOT NULL,
     assigned_by UUID NOT NULL REFERENCES app_user(user_id) ON DELETE RESTRICT,
     status assignment_status NOT NULL DEFAULT 'ACTIVE',
     assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -47,8 +49,6 @@ CREATE TABLE bed_assignment (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Partial unique index: A bed can only have ONE active assignment at a time across the hospital
-CREATE INDEX idx_unique_active_bed_assignment ON bed_assignment(bed_id) WHERE status = 'ACTIVE';
-
--- Partial unique index: A patient can only occupy ONE bed at a time
-CREATE INDEX idx_unique_active_patient_assignment ON bed_assignment(patient_id) WHERE status = 'ACTIVE';
+-- STRICT UNIQUE PARTIAL INDEXES: Prevents double-booking at the DB level
+CREATE UNIQUE INDEX idx_unique_active_bed_assignment ON bed_assignment(bed_id) WHERE (status = 'ACTIVE');
+CREATE UNIQUE INDEX idx_unique_active_patient_assignment ON bed_assignment(patient_id) WHERE (status = 'ACTIVE');
