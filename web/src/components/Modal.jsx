@@ -1,10 +1,12 @@
 // for admitting or transferring patients
-import React, { useEffect } from 'react';
 
+import React, { useEffect } from 'react';
 export function Modal({ isOpen, onClose, title, children }) {
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !e.defaultPrevented) {
+        onClose();
+      }
     };
     if (isOpen) window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);

@@ -1,8 +1,10 @@
 -- 1. Enums for wards and beds
 CREATE TYPE ward_type AS ENUM ('GENERAL', 'ICU', 'EMERGENCY', 'PEDIATRIC', 'MATERNITY');
-CREATE TYPE bed_status AS ENUM ('AVAILABLE', 'OCCUPIED', 'MAINTENANCE', 'RESERVED');
+CREATE TYPE bed_status AS ENUM ('AVAILABLE', 'OCCUPIED', 'MAINTENANCE', 'RESERVED','CLEANING','OUT_OF_SERVICE');
 CREATE TYPE assignment_status AS ENUM ('ACTIVE', 'DISCHARGED', 'TRANSFERRED');
 
+-- ADD compisite unique constrainst to department table from 001 for hospital scoping
+ALTER TABLE department ADD constraint uq_department_hospital_id_id unique (hospital_id, department_id);
 -- 2. Ward Table (Scoped to Hospital and Department)
 CREATE TABLE ward (
     ward_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
