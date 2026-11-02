@@ -1,0 +1,22 @@
+:root {
+  --color-bg-primary: #ffffff;
+  --color-bg-surface: #f8fafc;
+  --color-bg-overlay: rgba(15, 23, 42, 0.6);
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-border: #e2e8f0;
+  --color-brand: #0284c7;
+  --status-available-bg: #dcfce7;
+  --status-available-text: #166534;
+  --status-occupied-bg: #fee2e2;
+  --status-occupied-text: #991b1b;
+  --status-maintenance-bg: #fef3c7;
+  --status-maintenance-text: #92400e;
+  --status-reserved-bg: #e0e7ff;
+  --status-reserved-text: #3730a3;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-full: 9999px;
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
