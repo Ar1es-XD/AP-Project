@@ -6,7 +6,7 @@
       "scripts": {
             "dev": "nodemon src/server.js",
             "start": "node src/server.js",
-            "migrate": "dotenv -e .env -- node-pg-migrate -m ../db/migrations --migration-file-language sql",
+            "migrate": "dotenv run -- node-pg-migrate -m ../db/migrations --migration-file-language sql",
             "seed": "node scripts/seed.js",
             "test": "node --test --test-concurrency=1"
       },
