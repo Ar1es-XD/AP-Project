@@ -16,7 +16,7 @@ CREATE TABLE ward (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT fk_ward_department FOREIGN KEY (hospital_id, department_id) 
-        REFERENCES department(hospital_id, department_id) ON DELETE SET NULL,
+        REFERENCES department(hospital_id, department_id) ON DELETE SET NULL (department_id),
     CONSTRAINT uq_ward_hospital_id_id UNIQUE (hospital_id, ward_id),
     CONSTRAINT uq_ward_hospital_code UNIQUE (hospital_id, code)
 );
@@ -50,7 +50,11 @@ CREATE TABLE bed_assignment (
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT fk_assignment_bed FOREIGN KEY (hospital_id, bed_id) 
-        REFERENCES bed(hospital_id, bed_id) ON DELETE RESTRICT
+        REFERENCES bed(hospital_id, bed_id) ON DELETE RESTRICT,
+    CONSTRAINT ck_assignment_discharge CHECK (
+        (status = 'ACTIVE' AND discharged_at IS NULL)
+        OR (status <> 'ACTIVE' AND discharged_at IS NOT NULL AND discharged_at >= assigned_at)
+    )
 );
 
 CREATE UNIQUE INDEX idx_unique_active_bed_assignment ON bed_assignment(bed_id) WHERE (status = 'ACTIVE');
