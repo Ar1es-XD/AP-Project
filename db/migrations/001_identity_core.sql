@@ -13,7 +13,7 @@ city_id uuid not null references city,
 name text not null,
 address text,
 hospital_type text,
-created_at timestampz not null default now()
+created_at timestamptz not null default now()
 );
 
 create table department (

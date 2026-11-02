@@ -9,5 +9,10 @@ node_modules/
 
 #build artifacts 
 .DS_Store
+*.log
+# build ,test and generated outputs
+generated/
 dist/
+build/
+coverage/
 mywork.pdf
