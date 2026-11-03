@@ -261,7 +261,10 @@ erDiagram
 
     IDEMPOTENCY_KEY {
         uuid key PK
-        uuid user_id
+        uuid user_id FK
+        text method
+        text route
+        uuid hospital_id
         text request_hash
         jsonb response
         timestamptz created_at
@@ -284,22 +287,23 @@ erDiagram
 | `QUEUE_ENTRY` | Tracks individual patient tokens, triage priority, check-in timestamps, and queue status within an OPD queue. |
 | `BED_ASSIGNMENT` | Inpatient records linking a patient to an allocated bed, tracking who assigned it, admission and discharge timestamps, and assignment status. Partial unique indexes enforce one active assignment per bed and one active assignment per patient. |
 | `AUDIT_LOG` | Append-only, tamper-proof log of every state-changing action. Stores before/after JSONB snapshots for forensic review. DML restrictions prevent updates or deletes to this table. |
-| `IDEMPOTENCY_KEY` | Prevents duplicate writes from retried API requests. Stores the response of the first successful request so replays return the cached result without creating duplicate records. |
+| `IDEMPOTENCY_KEY` | Prevents duplicate writes from retried API requests. Stored responses are scoped by `(key, user_id, method, route, hospital_id)`, with a composite unique constraint preventing cross-user or cross-route collisions. |
 
 ### Key Database & Business Rules
 
 * **One bed, one active patient:** A bed can have many historical assignments over time, but a partial unique index (`WHERE status = 'ACTIVE'`) ensures it can never have two active occupants simultaneously.
 * **One active assignment per patient:** A second partial unique index prevents a patient from being assigned to two beds at once.
+* **Hospital-scoped bed assignment integrity:** In `BED_ASSIGNMENT`, the assigned `bed_id` and `patient_id` must both belong to the specified `hospital_id`. This is enforced via composite foreign keys (`CONSTRAINT fk_assignment_bed FOREIGN KEY (hospital_id, bed_id) REFERENCES bed(hospital_id, bed_id)`) and explicit transactional checks ensuring `patient.hospital_id = bed_assignment.hospital_id`, physically preventing cross-hospital bed allocation.
 * **Explicit bed status progression:** Bed status must move through distinct states: `AVAILABLE` → `RESERVED` → `OCCUPIED` → `CLEANING` → `AVAILABLE` (with `OUT_OF_SERVICE` for maintenance). A discharged bed cannot be marked available until housekeeping confirms it has been sanitized.
 * **Deterministic queue states:** Queue entries must follow clear transitions: `WAITING` → `CALLED` → `IN_SERVICE` → `COMPLETED` (or `CANCELLED` if the patient leaves or doesn't show up).
 * **Concurrency protection:** When reserving a bed, the backend uses atomic database transactions with row-level locks (`SELECT ... FOR UPDATE SKIP LOCKED`) so two staff members cannot assign the same bed simultaneously. This is one of the operations performed via the raw `pg` database driver rather than Prisma, because Prisma's query builder cannot express `FOR UPDATE SKIP LOCKED`.
 * **Discharge constraint:** A `CHECK` constraint ensures that `discharged_at` is `NULL` when status is `ACTIVE`, and is non-null and >= `assigned_at` when status is `DISCHARGED` or `TRANSFERRED`.
-* **Audit log immutability:** The `audit_log` table has database-level DML restrictions: `UPDATE` and `DELETE` are revoked from the application database role, ensuring the log is append-only and tamper-proof.
-* **Idempotency for write operations:** Mutating API endpoints accept an `Idempotency-Key` header. The middleware checks the `idempotency_key` table and returns the cached response for duplicate requests, preventing double-writes from network retries.
+* **Audit log immutability (planned control):** In scheduled migration `004_roles_and_rls.sql`, database-level DML restrictions (`REVOKE UPDATE, DELETE`) will be applied to `audit_log` for the `api_user` role, ensuring the log is append-only and tamper-proof. (Note: initial migration `001_identity_core.sql` defines the table structure; the permission revocation is scheduled when the non-owner role is provisioned).
+* **Idempotency for write operations (pre-claim pattern):** Mutating API endpoints accept an `Idempotency-Key` header. The middleware inserts the key with `response = NULL` into `idempotency_key` *before* the handler executes, scoped by `(key, user_id, method, route, hospital_id)`. The primary key constraint prevents concurrent duplicate requests from executing simultaneously: duplicates receive the stored response if already completed, or a `409 Conflict` if the initial request is still in flight. Reusing an existing key with a different `request_hash` returns a deterministic `422 Unprocessable Entity` client error without executing the mutation. The handler's writes and final response payload are committed in a single atomic transaction.
 * **City-wide data boundary:** In city-wide mode, each hospital maintains full ownership of its operational records. The city module only reads aggregated capacity and average wait times via a database view, never raw private patient records.
 * **Bilateral transfer confirmation:** The city dashboard displays estimated bed availability, but an inter-hospital transfer cannot be confirmed until the receiving facility explicitly accepts the referral.
-* **User lockout:** After 5 consecutive failed login attempts, the `app_user.locked_until` timestamp is set 15 minutes in the future. Login attempts during lockout are rejected regardless of password correctness.
-* **Patient merge pointer:** When duplicate patient records are discovered, one record's `merged_into` field points to the canonical record. Downstream queries follow the pointer to resolve the active patient.
+* **User lockout:** After 5 consecutive failed login attempts, the `app_user.locked_until` timestamp is set 15 minutes in the future. Failed login increments, threshold comparisons, and lockout updates execute atomically in a single SQL operation to prevent race conditions under concurrent requests. Login attempts during lockout are rejected regardless of password correctness.
+* **Patient merge pointer and cycle prevention:** When duplicate patient records are discovered, one record's `merged_into` field points to the canonical record. Merge transactions must reject self-links (`patient_id = merged_into`) and atomically traverse the target chain to verify no cycle exists before updating the pointer. If validation fails, the pointer update is aborted and the transaction rolls back. Downstream queries follow this pointer to resolve the canonical active patient.
 
 ---
 
@@ -320,20 +324,14 @@ We chose a practical dual-backend architecture: **Node.js/Express** with **Prism
   * **Streams:** For audit log exports, we use Node.js `Readable` streams to pipe large result sets directly to the HTTP response without buffering the entire JSON payload in memory. This keeps memory usage constant regardless of log size.
   * The Express server uses Node's **`process` module** for environment variable access (`process.env`), graceful shutdown signal handling (`process.on('SIGTERM', ...)`), and health checks. The **`path` module** is used for resolving migration and static file paths. The **`fs` module** is used for reading seed data files.
 
-* **ORM & Database Access: Prisma + pg (Hybrid)**
-  * **Prisma ORM** is the primary data access layer for all standard CRUD operations. Prisma provides:
-    * **Prisma Schema** (`prisma/schema.prisma`): Declarative data model defining all entities, field types, relations, and constraints.
-    * **Prisma Models**: Typed representations of each database table, auto-generated as a Prisma Client.
-    * **Prisma Migrations** (`prisma migrate`): Version-controlled, reproducible schema changes.
-    * **Prisma Client**: Auto-generated, type-safe query builder for `create`, `findMany`, `findUnique`, `update`, `delete`, and `upsert` operations.
-    * **Prisma Relations**: Defines 1:N and M:N relationships between models (e.g., Hospital → Departments, User → UserHospitalRoles). Supports nested reads (`include`), nested creates, and relation queries.
-    * **Prisma Filtering**: Rich `where` clause API supporting `equals`, `contains`, `startsWith`, `in`, `gte`, `lte`, and compound `AND`/`OR`/`NOT` conditions.
-    * **Prisma Pagination**: Cursor-based and offset-based pagination using `skip`, `take`, and `cursor`.
-    * **Prisma Sorting**: `orderBy` on any field, including nested relation fields.
-    * **Prisma Seeding** (`prisma db seed`): Seed script for populating development databases with synthetic test data (cities, hospitals, departments, wards, beds, staff accounts with hashed passwords, and sample patients).
-  * **Raw `pg` driver** (`node-postgres`) is retained for two specific operations where Prisma's query builder cannot express the required PostgreSQL features:
-    1. **`SELECT ... FOR UPDATE SKIP LOCKED`** for atomic bed reservation inside explicit transactions. Prisma does not support `SKIP LOCKED`, which is essential for non-blocking concurrent bed assignments.
-    2. **Database role setup and RLS policy management** via raw SQL migrations.
+* **ORM & Database Access: Prisma + node-pg-migrate (Hybrid)**
+  * **Authoritative Schema & Migration Engine (`node-pg-migrate`):** `node-pg-migrate` is the sole owner of database schema history and migration execution (`db/migrations/`). This guarantees that complex PostgreSQL features—such as `citext` extensions, custom enums (`user_role`, `ward_type`, `bed_status`, `assignment_status`), composite foreign keys, partial unique indexes (`WHERE status = 'ACTIVE'`), triggers, and RLS policies—are version-controlled with native SQL precision without migration drift or abstraction friction. Initial migration `001_identity_core.sql` has already been executed against Supabase.
+  * **Prisma ORM via Database Introspection (`prisma db pull`):** Rather than running `prisma migrate dev` against the database (which would conflict with `node-pg-migrate`), Prisma integrates via introspection. Running `npx prisma db pull` reads the live PostgreSQL tables and generates `prisma/schema.prisma` automatically. Running `npx prisma generate` creates the type-safe Prisma Client.
+  * **Prisma Client in MVC Service Layer:** Express services use Prisma Client for all standard domain operations:
+    * **Prisma Models & Relations:** Typed access to `AppUser`, `Patient`, `City`, `Hospital`, `Department`, `Ward`, `Bed`, `OpdQueue`, `QueueEntry`, with 1:N and M:N relations.
+    * **Filtering, Pagination & Sorting:** Express services leverage Prisma's type-safe `where` filters, offset/cursor pagination (`skip`/`take`), and `orderBy` sorting for patient records, queues, and bed inventory.
+    * **Prisma Seeding:** Populates synthetic test data via `scripts/seed.js` executed through `npm run seed`.
+  * **Raw `pg` Driver for Concurrency:** The native `pg.Pool` connection pooler and `withTransaction()` helper are retained specifically for `SELECT ... FOR UPDATE SKIP LOCKED` atomic bed reservation and database transaction management where Prisma's query builder cannot express PostgreSQL row-level lock modes.
   * This hybrid approach demonstrates mastery of both ORM-based data access (abstraction, type safety, relation management) and raw database driver usage (connection pooling, manual transaction control, ACID guarantees) — understanding when each tool is appropriate and why.
 
 * **Analytics Backend: Python + FastAPI**
@@ -440,8 +438,10 @@ The API follows REST architectural constraints with resource-based URLs, correct
 
 | Method | Endpoint | Purpose | Auth Required |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/auth/register` | Create a new staff account | No |
+| `POST` | `/api/v1/auth/register` | Submit staff account registration (created inactive) | No |
 | `POST` | `/api/v1/auth/login` | Authenticate and receive JWT | No |
+
+**Staff Registration & Authorization Policy:** Public self-registration (`POST /api/v1/auth/register`) creates an inactive account (`is_active = false`) with zero hospital or role associations. A designated `HOSPITAL_ADMIN` must review, approve, and activate the account, explicitly binding the permitted `hospital_id` and `user_role` in `user_hospital_role`. Public registration cannot assign `HOSPITAL_ADMIN` or any privileged role, regardless of request payload values.
 | `GET` | `/api/v1/patients` | List patients (filtered, paginated, sorted via Prisma) | Yes |
 | `POST` | `/api/v1/patients` | Register a new patient (UHID generation) | Yes |
 | `GET` | `/api/v1/patients/:id` | Get patient by ID | Yes |
@@ -748,34 +748,37 @@ flowchart TD
     B -->|No| C["Return 401: Invalid credentials"]
     B -->|Yes| D{Account Locked?}
     D -->|"Yes: locked_until > now()"| E["Return 403: Account locked, retry after N minutes"]
-    D -->|No| F["Retrieve password_hash from DB"]
-    F --> G["Argon2id Verify (constant-time comparison)"]
+    D -->|No| F["Retrieve password_hash, is_active, token_version from DB"]
+    F --> FA{is_active == true?}
+    FA -->|No| C
+    FA -->|Yes| G["Argon2id Verify (constant-time comparison)"]
     G --> H{Password Correct?}
-    H -->|No| I["Increment failed_logins counter"]
+    H -->|No| I["Atomic Update in Single SQL Query:\nfailed_logins = failed_logins + 1\nlocked_until = CASE WHEN failed_logins + 1 >= 5\nTHEN now() + 15 min ELSE locked_until END"]
     I --> J{failed_logins >= 5?}
-    J -->|Yes| K["Set locked_until = now() + 15 minutes"]
+    J -->|Yes| K["Account Locked for 15 minutes"]
     J -->|No| C
     K --> C
-    H -->|Yes| L["Reset failed_logins to 0, update last_login_at"]
-    L --> M["Fetch roles from user_hospital_role"]
-    M --> N["Sign JWT with claims: sub, hospital_id, roles"]
-    N --> O["Return 200: { token, expiresIn }"]
+    H -->|Yes| L["Atomic Reset: failed_logins = 0, locked_until = NULL, last_login_at = now()"]
+    L --> M["Fetch hospital-scoped roles:\nSELECT role FROM user_hospital_role\nWHERE user_id = $1 AND hospital_id = $2"]
+    M --> N["Sign JWT (15-min expiry) with claims:\nsub, hospital_id, roles (scoped), token_version"]
+    N --> O["Return 200: { token, expiresIn: '15m' }"]
 
     O --> P["Subsequent API Request with Authorization: Bearer token"]
-    P --> Q["Auth Middleware: Verify JWT signature & expiry"]
+    P --> Q["Auth Middleware: Verify JWT signature & 15-min expiry"]
     Q --> R{Valid Token?}
     R -->|No| S["Return 401: Invalid or expired token"]
-    R -->|Yes| T["Attach user claims to req.user"]
-    T --> U["RBAC Middleware: Check req.user.roles against required role"]
-    U --> V{Has Required Role?}
-    V -->|No| W["Return 403: Insufficient permissions"]
+    R -->|Yes| T["Attach user claims to req.user;\nOptionally verify token_version against app_user cache"]
+    T --> U["RBAC Middleware: Check req.user.roles against required role for hospital_id"]
+    U --> V{Has Required Role in hospital_id?}
+    V -->|No| W["Return 403: Insufficient permissions for target hospital"]
     V -->|Yes| X["Proceed to Route Handler"]
 ```
 
 **Authentication strategy choices:**
-* **JWT (JSON Web Tokens)** is the primary authentication mechanism. The server signs a token on login containing the user's ID, active hospital, and roles. Subsequent requests include this token in the `Authorization: Bearer <token>` header. The server verifies the signature without hitting the database on every request, making it stateless and scalable.
+* **JWT (JSON Web Tokens)** is the primary authentication mechanism. The server signs a short-lived access token on login (15-minute lifespan) containing the user's ID (`sub`), active `hospital_id`, scoped `roles` for that specific hospital, and a `token_version`. Scoping roles strictly to the active `hospital_id` prevents cross-tenant privilege escalation across hospital boundaries. Subsequent requests include this token in the `Authorization: Bearer <token>` header. The server verifies the cryptographic signature without hitting the database on every read, keeping API endpoints fast and stateless.
+* **Token Lifecycle, Deactivation & Revocation:** To prevent deactivated (`is_active = false`) or locked users from maintaining access until token expiration, the `app_user` entity maintains a `token_version` column (integer). When an administrator deactivates an account or changes roles, `token_version` is incremented. In high-security mutation routes and privilege elevation checks, the middleware compares the JWT `token_version` claim against the database, instantly invalidating all outstanding tokens. The maximum window for stale token access on read-only endpoints is bounded by the strict 15-minute expiration window.
 * **Session cookies** are the alternative approach where the server stores session state (typically in a database or Redis) and sends an `httpOnly` cookie to the browser. This approach is simpler for browser-only clients and prevents XSS-based token theft. However, it requires server-side session storage and is harder to scale across multiple API servers. For this project's REST API architecture, JWT is the better fit — but session cookies would be appropriate if the system were a traditional server-rendered application.
-* **Argon2id** is used for password hashing because it is memory-hard (resistant to GPU/ASIC attacks), provides automatic salting, and is the recommended algorithm by OWASP. The `argon2` npm package handles the hashing and constant-time verification.
+* **Argon2id** is used for password hashing because it is memory-hard (resistant to GPU/ASIC attacks), provides automatic salting, and is the recommended algorithm by OWASP. The `argon2` npm package handles the hashing and constant-time verification. Failed login attempts are incremented atomically alongside `locked_until` in a single SQL operation to eliminate race conditions during brute-force login floods.
 
 ---
 
@@ -792,14 +795,14 @@ flowchart TD
 
 ### Suggested Build Order
 
-1. **Prisma Schema & Migrations:** Define all entities in `prisma/schema.prisma`. Run `prisma migrate dev` to generate the initial migration. Apply supplementary raw SQL migrations for concurrency features (partial unique indexes, check constraints, RLS policies).
-2. **Prisma Seeding:** Write a seed script that populates the database with synthetic test data — cities, hospitals, departments, wards, beds, and staff accounts with Argon2id-hashed passwords. Run via `prisma db seed`.
+1. **Database Schema & Migrations:** `node-pg-migrate` is the single source of truth for database migrations. Initial migration `001_identity_core.sql` has already been authored, committed, and executed on Supabase, establishing core tables (`city`, `hospital`, `department`, `app_user`, `user_hospital_role`, `patient`, `audit_log`, `idempotency_key`). Run `npx prisma db pull` to introspect the schema into `prisma/schema.prisma` and `npx prisma generate` to generate the type-safe client. All subsequent structural changes (`002_ward_bed_assignment.sql`, `003_queue_management.sql`, `004_roles_and_rls.sql`) are applied exclusively through `node-pg-migrate`.
+2. **Prisma Seeding:** Write a seed script that populates the database with synthetic test data — cities, hospitals, departments, wards, beds, and staff accounts with Argon2id-hashed passwords. Run via `npm run seed` or `npx prisma db seed`.
 3. **Core Express Server & Middleware Pipeline:** Assemble `app.js` with helmet, cors, pino-http, express.json, rate limiter, and centralized error handler. Create `server.js` with graceful shutdown on `SIGTERM`/`SIGINT`.
-4. **Auth Routes:** Build registration (Argon2id hashing) and login (verification, lockout, JWT signing) endpoints.
-5. **Patient CRUD:** Build patient registration with atomic UHID generation, list with Prisma filtering + pagination + sorting, update, and duplicate detection.
+4. **Auth Routes:** Build registration (Argon2id hashing, `is_active: false` for self-registered staff until admin activation) and login (verification, atomic lockout check, JWT signing with 15-minute lifespan and hospital-scoped roles) endpoints.
+5. **Patient CRUD:** Build patient registration with atomic UHID generation, list with Prisma filtering + pagination + sorting, update, and duplicate detection (including cycle and self-link checks on merges).
 6. **Bed & Ward Operations:** Build bed listing with Prisma, bed reservation with raw `pg` transactions (`SELECT ... FOR UPDATE SKIP LOCKED`), discharge, and housekeeping status updates. Wire `bedReleased` EventEmitter for waitlist notification.
 7. **OPD Queue Operations:** Build token generation, calling sequences, status transitions, and no-show handling.
-8. **Analytics Service:** Build the FastAPI service with the $M/M/c$ and Erlang-C waiting time formulas. Wire the Express analytics client with timeout and local fallback.
+8. **Analytics Service:** Build the FastAPI service with the $M/M/c$ and Erlang-C waiting time formulas. Wire the Express analytics client with timeout, HTTPS/TLS verification, and local fallback.
 9. **Frontend Screens:** Build the React interfaces (login, patient registration, staff queue board, ward bed map, and city dashboard) with React Router and route guards.
 10. **City-Wide View:** Add simulated hospital entries and aggregate capacity view.
 11. **Testing & CI:** Run concurrency tests on bed booking, verify no-show handling, test auth lockout, verify idempotency, and calibrate wait-time math against sample clinic data. Ensure all tests pass in GitHub Actions CI.
