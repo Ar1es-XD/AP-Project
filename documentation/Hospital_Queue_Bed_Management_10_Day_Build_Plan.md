@@ -1,12 +1,12 @@
 # Hospital Queue & Bed Management System — 10-Day Build Plan (Production-Shaped & AP-Aligned)
 
-Team of 3 · Day 1 = Sat 24 Oct 2026 · Day 10 = Mon 2 Nov 2026
+Team of 3 · Phase 1 Foundation (Days 1–2): Sat 24 Oct – Mon 2 Nov 2026 [COMPLETED] · Active Execution (Days 3–10): Tue 3 Nov – Wed 11 Nov 2026
 
 ---
 
 ## 1. Roles & Domain Ownership
 
-Each person owns one operational domain end-to-end (database, API, UI, and automated tests) **and receives an equal, balanced share of every technology layer**: HTML, CSS, React, JS, Node.js, Raw SQL, Prisma ORM, and Python.
+Each person owns one operational domain end-to-end (database, API, UI, and automated tests) **and receives an equal, balanced share of all 9 technology layers**: HTML, CSS, React, JS, Node.js, Raw SQL, Prisma ORM, Python, and Automated Testing.
 
 | Person | Teammate | Operational Domain | End-to-End Ownership Scope |
 | :--- | :--- | :--- | :--- |
@@ -27,7 +27,7 @@ Every teammate works actively across all 9 technical disciplines. Work already c
 | **Node / Express (MVC Layer)** | • Controller: `bed.controller.js`<br>• Service: `bed.service.js`<br>• Route: `bed.routes.js`<br>• Bed reservation expiry sweeper<br>• Housekeeping status transition handlers | • Controller: `queue.controller.js`<br>• Service: `queue.service.js`<br>• Route: `queue.routes.js`<br>• Doctor session start/pause/end admin<br>• "Symptoms worse" triage escalation handler | • **`[COMPLETED]`** `api/package.json` setup (Express 5, pg, nodemon)<br>• Express app assembly (`app.js`) & server listener (`server.js`)<br>• Controllers & Services: `auth`, `patient`, `city`<br>• Routes: `auth.routes.js`, `patient.routes.js`, `city.routes.js`<br>• API versioning (`/api/v1/...`) |
 | **Middlewares & Validation** | • Zod schemas for bed booking, transfer & discharge (`bedValidation.js`)<br>• Bed state-machine transition guard middleware | • Zod schemas for queue join, token call & priority triage (`queueValidation.js`)<br>• Triage priority boundary guard middleware | • 9-stage middleware pipeline assembly (`app.js`)<br>• `helmet()`, `cors()`, `express.json()`, `rateLimit()`<br>• `pino-http` logger with UUID request-id & PHI sanitization<br>• JWT auth guard & RBAC hospital-scoping middleware<br>• Idempotency middleware (`idempotency_key` table)<br>• Centralized error handler `(err, req, res, next)` |
 | **Node Core Runtime (Events & Streams)** | • Emits `bedReleased` event upon patient discharge and housekeeping clearance<br>• Listens to `emergencyAdmit` event to auto-hold ICU beds | • Listens to `bedReleased` event to auto-dispatch waitlisted patients<br>• Emits `patientCalled` and `symptomsEscalated` events<br>• Background interval timers for queue rolling averages | • Central `EventEmitter` bus singleton (`src/lib/events.js`)<br>• Node.js `Readable` streams for memory-efficient audit-log export<br>• Node `process` signal handlers (`SIGTERM`/`SIGINT`) for graceful shutdown |
-| **Python / FastAPI (Analytics)** | • Pytest test cases for Erlang-C edge cases ($\rho \ge 1$, $c = 0$, Erlang-C table verification) | • Erlang-C multi-server queue formulas implementation<br>• FastAPI service (`main.py`, `POST /estimate`, `/health`) | • Node $\to$ FastAPI HTTP client with shared secret header (`x-analytics-secret`), 1.5s timeout, and local statistical fallback |
+| **Python / FastAPI (Analytics)** | • Pytest test cases for Erlang-C edge cases ($\rho \ge 1$, $c = 0$, Erlang-C table verification) | • Erlang-C multi-server queue formulas implementation<br>• FastAPI service (`main.py`, `POST /estimate`, `/health`) | • Node $\to$ FastAPI HTTP client over HTTPS/TLS (with certificate validation) with shared secret header (`x-analytics-secret`), 1.5s timeout, and local statistical fallback |
 | **React Frontend** | • Ward bed map with live occupancy badges<br>• Admit / discharge / transfer modal dialogs<br>• Housekeeping sanitation board<br>• Bed reservation countdown timer | • Staff queue board with calling actions<br>• Doctor calling console<br>• Patient token screen with "symptoms worse" button<br>• Live queue stats widget | • App shell with `react-router-dom` & protected route guards<br>• Login screen with lockout feedback<br>• Patient registration UI with duplicate warning modal<br>• City capacity dashboard & referral UI<br>• Audit-log viewer |
 | **HTML + CSS** | • **`[COMPLETED]`** `tokens.css` (Design tokens)<br>• **`[COMPLETED]`** `Badge.jsx` (Accessible status badges)<br>• Mobile-responsive ward bed grid layout | • Queue board styling with high-contrast typography<br>• Waiting-room large-screen display (token numbers only, zero PHI)<br>• Audio-cue visual indicator | • Shared navbar, sidebar, and layout shell<br>• Form styling & accessible error states<br>• Patient consent notice page<br>• Responsive card grids and final responsive pass |
 | **Automated Testing** | • Concurrency test script (20 simultaneous requests against 5 beds in CI)<br>• Pytest Erlang-C mathematical tests | • k6 load test script on queue join & call-next<br>• Queue FIFO order & priority aging unit tests | • **`[COMPLETED]`** GitHub Actions CI pipeline (`.github/workflows/ci.yml`)<br>• Supertest suite for authentication & lockout<br>• Supertest suite for tenant isolation (cross-hospital 403)<br>• Idempotency replay verification test |
@@ -47,14 +47,14 @@ These turn the academic prototype into a production-grade hospital system:
 | :--- | :--- | :--- | :--- | :--- |
 | **Identity & Access** | `app_user`, per-hospital roles, Argon2id hashing, 5-attempt lockout, login rate limiting, JWT tokens, route guards. | C | 2 | Schema done; Auth routes pending |
 | **Real Authorization** | Every query scoped by hospital; API runs as non-owner `api_user` role with RLS; city dashboard reads aggregate view through `city_reader`. | C | 3–4 | Pending |
-| **Audit Trail** | Append-only `audit_log` written on view, admit, transfer, discharge, queue call, and referral; DML revoked; admin viewer. | C (helper), A & B (call it) | 2–7 | Schema done; Helper pending |
+| **Audit Trail** | Append-only `audit_log` written on sensitive PHI views/exports, admit, transfer, discharge, queue call, and referral; DML revoked; admin viewer. | C (helper), A & B (call it) | 2–7 | Schema done; Helper pending |
 | **Patient Identity** | UUID IDs, unique UHID per hospital, date of birth, duplicate check warning, merge pointer. | C | 1–2 | Schema done; Routes pending |
 | **Bed Integrity** | `bed_assignment` history, composite FKs, status transition triggers, reservation expiry sweeper. | A | 1–4 | Migration done; Sweeper pending |
 | **Safe Retries & Races** | `Idempotency-Key` on admit, join, and referral; atomic token counter; compare-and-swap status updates; row locks. | C (idempotency), A (beds), B (queue) | 3 | Schema done; Middleware pending |
 | **Emergency & Fairness** | Defined priority levels, priority aging formula so low priority is never starved, audited emergency flag, "symptoms worse" escalation. | B | 3–7 | Pending |
 | **Honest Wait Estimates** | `doctor_session` gives live $c$; FastAPI returns a range behind a shared secret; Node falls back if Python is down. | B (service), C (client) | 4 | Pending |
 | **Privacy** | Waiting-room display shows tokens only; no PHI in logs or URLs; masked phone numbers in lists; consent notice at registration. | B, C | 6–8 | Pino redaction planned |
-| **Migrations & CI** | All SQL through `node-pg-migrate` & Prisma; GitHub Actions builds fresh Postgres 16 and runs every test on each PR. | C (setup), all | 1 | **`[COMPLETED]`** |
+| **Migrations & CI** | All SQL migrations through `node-pg-migrate` (single migration owner) with Prisma model synchronization (`prisma db pull`); GitHub Actions builds fresh Postgres 16 and runs every test on each PR. | C (setup), all | 1 | **`[COMPLETED]`** |
 | **Automated Tests** | Concurrency & bed tests (A), queue & Erlang-C tests (B), authorization & end-to-end tests (C). | A, B, C | 3–9 | CI ready; Tests pending |
 | **Ops Basics** | `/health` endpoint, separate dev and prod config, backup-and-restore drill, written paper-fallback downtime procedure. | C (drill), A (procedure) | 8–9 | Config done; Drill pending |
 
@@ -138,9 +138,9 @@ These turn the academic prototype into a production-grade hospital system:
 
 ## 7. Definition of Done
 
-* [ ] **Concurrency Guarantee**: 20 simultaneous admit requests against 5 beds produce exactly 5 admissions and 15 rejections/waitlist entries; repeating a request with the same `Idempotency-Key` returns the cached response without creating a second record.
+* [ ] **Concurrency Guarantee**: 20 simultaneous admit requests against 5 beds produce exactly 5 admissions and 15 rejections/waitlist entries; repeating a request with the same `Idempotency-Key` and matching payload hash returns the cached response without creating a second record; reusing an `Idempotency-Key` with a differing request payload hash deterministically returns `422 Unprocessable Entity`.
 * [ ] **Tenant Isolation**: A staff user at Hospital X cannot read, modify, or delete Hospital Y's patients, beds, or queues (enforced by automated test); the city viewer role reads aggregated capacity only.
-* [ ] **Audit Completeness**: Every admit, transfer, discharge, queue call, and referral writes an immutable `audit_log` row containing the actor, timestamp, before/after JSONB state, and UUID request ID.
+* [ ] **Audit Completeness**: Every state mutation (admit, transfer, discharge, queue call, referral) and sensitive read access (patient PHI details view, audit log exports, city referral query) writes an immutable `audit_log` row containing the actor, timestamp, before/after JSONB state, and UUID request ID.
 * [ ] **Queue Integrity**: Queue tokens are sequential and unique per department per day; call-next respects triage priority with aging so low-priority patients are not starved.
 * [ ] **Honest Wait Estimates**: Wait-time estimates are displayed as a range computed from Erlang-C using live doctor count, with an automated fallback when the analytics service is unavailable.
 * [ ] **Clean CI Build**: A fresh database builds successfully from migrations in GitHub Actions CI, and one full backup $\to$ restore drill has been executed.
