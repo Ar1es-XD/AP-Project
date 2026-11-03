@@ -6,23 +6,22 @@ Hospitals deal with two major operational headaches every day: overcrowded OPD w
 
 The system manages outpatient (OPD) queues, tracks live bed availability, and handles patient admissions and discharges. It is designed to work smoothly within a single hospital first, while having the architecture ready to expand into a city-wide coordination dashboard where multiple hospitals can view each other's live capacity.
 
-This proposal provides the three requested deliverables:
+This proposal provides the four requested deliverables:
 
 1. **ER diagram for the solution** — the relational data model, entity breakdown, and integrity rules.
-2. **Tech stack** — the frameworks and databases to be used, including system communication and queueing calculations.
+2. **Tech stack** — the frameworks, ORM, database, and middleware architecture to be used, including system communication and queueing calculations.
 3. **Data flow diagrams (DFDs)** — context (Level 0), system decomposition (Level 1), and detailed operational workflows (Level 2).
+4. **Authentication & authorization design** — user registration, login, JWT-based access control, and role-based hospital scoping.
 
-The proposed stack uses **React, JavaScript, HTML, CSS, Node.js, Python, and Supabase PostgreSQL**.
+The proposed stack uses **React, JavaScript, HTML, CSS, Node.js (Express), Prisma ORM, Python (FastAPI), and Supabase PostgreSQL**.
 
 ---
 
 # 1. ER Diagram for the Solution
 
-The database needs to handle high-frequency queue updates and strict, race-condition-free bed assignments. We use **Supabase PostgreSQL** as our relational database because we need ACID transactions and foreign-key constraints to guarantee that a bed is never double-booked.
+The database needs to handle high-frequency queue updates, strict race-condition-free bed assignments, secure user authentication with lockout protection, and tamper-proof audit logging. We use **Supabase PostgreSQL** as our relational database because we need ACID transactions, foreign-key constraints, row-level security (RLS), and database-level concurrency controls to guarantee correctness under simultaneous access.
 
 ### Entity Relationship Diagram
-
-![Entity Relationship Diagram](er_diagram.svg)
 
 #### Visual Schema & Relationship Map (Universal Text View)
 
@@ -31,44 +30,92 @@ The database needs to handle high-frequency queue updates and strict, race-condi
 |       CITY        |          |        HOSPITAL        |          |       DEPARTMENT        |
 +-------------------+          +------------------------+          +-------------------------+
 | * city_id    (PK) | 1      * | * hospital_id     (PK) | 1      * | * department_id    (PK) |
-|   city_name       | -------- |   city_id         (FK) | -------- |   hospital_id      (FK) |
-+-------------------+ contains |   hospital_name        |   has    |   department_name       |
-                               |   address              |          +-------------------------+
-                               |   hospital_type        |                       |
+|   name            | -------- |   city_id         (FK) | -------- |   hospital_id      (FK) |
++-------------------+ contains |   name                 |   has    |   name                  |
+                               |   address              |          |   UNIQUE(hosp_id, name) |
+                               |   hospital_type        |          +-------------------------+
+                               |   created_at           |                       |
                                +------------------------+                       | 1
-                                  | 1                | 1                        | operates
-                                  | registers        | manages                  | *
-                                  |                  |             +-------------------------+
-                                  |                  |             |        OPD_QUEUE        |
-                                  |                  |             +-------------------------+
-                                  |                  |             | * queue_id         (PK) |
-                                  |                  |             |   department_id    (FK) |
-                                  |                  |             |   queue_date            |
-                                  v *                v *           |   status                |
-+-------------------+          +------------------------+          +-------------------------+
-|      PATIENT      |          |          BED           |                       |
-+-------------------+          +------------------------+                       | 1
-| * patient_id (PK) |          | * bed_id          (PK) |                       | contains
-|   hospital_id(FK) |          |   hospital_id     (FK) |                       | *
-|   name            |          |   ward                 |                       v
-|   age             |          |   bed_type             |          +-------------------------+
-|   contact_number  |          |   status               |          |       QUEUE_ENTRY       |
-+-------------------+          +------------------------+          +-------------------------+
-   | 1           | 1                     | 1                       | * entry_id         (PK) |
-   | joins       | receives              | assigned_to             |   queue_id         (FK) |
-   |             |                       |                         |   patient_id       (FK) |
-   |             v *                     v *                       |   token_number          |
-   |          +-------------------------------------+              |   priority              |
-   |          |              ADMISSION              |              |   status                |
-   |          +-------------------------------------+              |   joined_at             |
-   |          | * admission_id                 (PK) |              +-------------------------+
-   |          |   patient_id                   (FK) |                           ^
-   |          |   hospital_id                  (FK) |                           | *
-   |          |   bed_id                       (FK) |                           | joins
-   |          |   admitted_at                       | --------------------------+
-   |          |   discharged_at                     | 1
-   |          |   status                            |
-   |          +-------------------------------------+
+                                  | 1       | 1      | 1                        | operates
+                                  |         |        |                          | *
+                                  |         |        |             +-------------------------+
+                                  |         |        |             |        OPD_QUEUE        |
+                                  |         |        |             +-------------------------+
+                                  |         |        |             | * queue_id         (PK) |
+                                  |         |        |             |   department_id    (FK) |
+                                  |         |        |             |   queue_date            |
+                                  |         |        |             |   status                |
+                                  v *       |        v *           +-------------------------+
++-------------------+           |      +------------------------+              |
+|     APP_USER      |           |      |          WARD          |              | 1
++-------------------+           |      +------------------------+              | contains
+| * user_id    (PK) |           |      | * ward_id         (PK) |              | *
+|   email (UNIQUE)  |           |      |   hospital_id     (FK) |              v
+|   full_name       |           |      |   department_id   (FK) |   +-------------------------+
+|   password_hash   |           |      |   name                 |   |       QUEUE_ENTRY       |
+|   is_active       |           |      |   code (UNIQUE/hosp)   |   +-------------------------+
+|   failed_logins   |           |      |   type (ward_type)     |   | * entry_id         (PK) |
+|   locked_until    |           |      |   floor_number         |   |   queue_id         (FK) |
+|   last_login_at   |           |      |   capacity             |   |   patient_id       (FK) |
+|   created_at      |           |      +------------------------+   |   token_number          |
++-------------------+           |                  |                |   priority              |
+        | 1                     |                  | 1              |   status                |
+        | has_roles             |                  | holds          |   joined_at             |
+        | *                     |                  | *              +-------------------------+
++-------------------------+     |      +------------------------+
+| USER_HOSPITAL_ROLE      |     |      |          BED           |
++-------------------------+     |      +------------------------+
+| * user_id       (FK,PK) |     |      | * bed_id          (PK) |
+| * hospital_id   (FK,PK) |     |      |   hospital_id     (FK) |
+| * role          (PK)    |     |      |   ward_id         (FK) |
+|   department_id (FK)    |     |      |   bed_number           |
++-------------------------+     |      |   status (bed_status)  |
+                                |      |   is_isolation         |
+                                |      |   reserved_until       |
++-------------------+           |      +------------------------+
+|      PATIENT      |           |                  |
++-------------------+           |                  | 1
+| * patient_id (PK) |           |                  | assigned_to
+|   hospital_id(FK) |           |                  | *
+|   uhid (UNIQUE)   |           |      +-------------------------------------+
+|   full_name       |           |      |           BED_ASSIGNMENT             |
+|   date_of_birth   |           |      +-------------------------------------+
+|   sex             |           |      | * assignment_id              (PK)   |
+|   phone_e164      |           |      |   hospital_id               (FK)   |
+|   merged_into(FK) |           |      |   bed_id                    (FK)   |
+|   created_at      |           |      |   patient_id                (FK)   |
+|   created_by (FK) |           |      |   assigned_by               (FK)   |
++-------------------+           |      |   status (assignment_status)       |
+        |                       |      |   assigned_at                      |
+        | joins                 |      |   discharged_at                    |
+        +------- QUEUE_ENTRY    |      |   notes                            |
+        | receives              |      +-------------------------------------+
+        +------- BED_ASSIGNMENT |
+                                |
++-------------------------------+------+
+|            AUDIT_LOG                 |
++--------------------------------------+
+| * audit_id  (PK, IDENTITY)          |
+|   at                                 |
+|   actor_user_id (FK)                 |
+|   hospital_id                        |
+|   action                             |
+|   entity_type                        |
+|   entity_id                          |
+|   before  (JSONB)                    |
+|   after   (JSONB)                    |
+|   request_id                         |
++--------------------------------------+
+
++--------------------------------------+
+|         IDEMPOTENCY_KEY              |
++--------------------------------------+
+| * key        (PK, UUID)             |
+|   user_id                            |
+|   request_hash                       |
+|   response   (JSONB)                 |
+|   created_at                         |
++--------------------------------------+
 ```
 
 #### Mermaid Source Code (for Mermaid-enabled viewers)
@@ -77,75 +124,147 @@ The database needs to handle high-frequency queue updates and strict, race-condi
 erDiagram
     CITY ||--o{ HOSPITAL : contains
     HOSPITAL ||--o{ DEPARTMENT : has
+    HOSPITAL ||--o{ WARD : manages
+    HOSPITAL ||--o{ BED : owns
     HOSPITAL ||--o{ PATIENT : registers
-    HOSPITAL ||--o{ BED : manages
+    HOSPITAL ||--o{ APP_USER : "employs (via role)"
     DEPARTMENT ||--o{ OPD_QUEUE : operates
+    DEPARTMENT ||--o{ WARD : "may contain"
+    WARD ||--o{ BED : holds
     PATIENT ||--o{ QUEUE_ENTRY : joins
     OPD_QUEUE ||--o{ QUEUE_ENTRY : contains
-    PATIENT ||--o{ ADMISSION : receives
-    HOSPITAL ||--o{ ADMISSION : records
-    BED ||--o{ ADMISSION : assigned_to
+    PATIENT ||--o{ BED_ASSIGNMENT : receives
+    BED ||--o{ BED_ASSIGNMENT : assigned_to
+    APP_USER ||--o{ USER_HOSPITAL_ROLE : has_roles
+    APP_USER ||--o{ BED_ASSIGNMENT : assigns
+    APP_USER ||--o{ PATIENT : creates
+    APP_USER ||--o{ AUDIT_LOG : performs
 
     CITY {
-        int city_id PK
-        string city_name
+        uuid city_id PK
+        text name UK
     }
 
     HOSPITAL {
-        int hospital_id PK
-        int city_id FK
-        string hospital_name
-        string address
-        string hospital_type
+        uuid hospital_id PK
+        uuid city_id FK
+        text name
+        text address
+        text hospital_type
+        timestamptz created_at
     }
 
     DEPARTMENT {
-        int department_id PK
-        int hospital_id FK
-        string department_name
+        uuid department_id PK
+        uuid hospital_id FK
+        text name
+    }
+
+    APP_USER {
+        uuid user_id PK
+        citext email UK
+        text full_name
+        text password_hash
+        boolean is_active
+        int failed_logins
+        timestamptz locked_until
+        timestamptz last_login_at
+        timestamptz created_at
+    }
+
+    USER_HOSPITAL_ROLE {
+        uuid user_id PK_FK
+        uuid hospital_id PK_FK
+        user_role role PK
+        uuid department_id FK
     }
 
     PATIENT {
-        int patient_id PK
-        int hospital_id FK
-        string name
-        int age
-        string contact_number
+        uuid patient_id PK
+        uuid hospital_id FK
+        text uhid UK
+        text full_name
+        date date_of_birth
+        text sex
+        text phone_e164
+        uuid merged_into FK
+        timestamptz created_at
+        uuid created_by FK
     }
 
-    OPD_QUEUE {
-        int queue_id PK
-        int department_id FK
-        date queue_date
-        string status
-    }
-
-    QUEUE_ENTRY {
-        int entry_id PK
-        int queue_id FK
-        int patient_id FK
-        int token_number
-        int priority
-        string status
-        timestamp joined_at
+    WARD {
+        uuid ward_id PK
+        uuid hospital_id FK
+        uuid department_id FK
+        text name
+        text code UK
+        ward_type type
+        int floor_number
+        int capacity
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     BED {
-        int bed_id PK
-        int hospital_id FK
-        string ward
-        string bed_type
-        string status
+        uuid bed_id PK
+        uuid hospital_id FK
+        uuid ward_id FK
+        text bed_number
+        bed_status status
+        boolean is_isolation
+        timestamptz reserved_until
+        timestamptz created_at
+        timestamptz updated_at
     }
 
-    ADMISSION {
-        int admission_id PK
-        int patient_id FK
-        int hospital_id FK
-        int bed_id FK
-        timestamp admitted_at
-        timestamp discharged_at
-        string status
+    OPD_QUEUE {
+        uuid queue_id PK
+        uuid department_id FK
+        date queue_date
+        text status
+    }
+
+    QUEUE_ENTRY {
+        uuid entry_id PK
+        uuid queue_id FK
+        uuid patient_id FK
+        int token_number
+        int priority
+        text status
+        timestamptz joined_at
+    }
+
+    BED_ASSIGNMENT {
+        uuid assignment_id PK
+        uuid hospital_id FK
+        uuid bed_id FK
+        uuid patient_id FK
+        uuid assigned_by FK
+        assignment_status status
+        timestamptz assigned_at
+        timestamptz discharged_at
+        text notes
+    }
+
+    AUDIT_LOG {
+        bigint audit_id PK
+        timestamptz at
+        uuid actor_user_id FK
+        uuid hospital_id
+        text action
+        text entity_type
+        text entity_id
+        jsonb before
+        jsonb after
+        uuid request_id
+    }
+
+    IDEMPOTENCY_KEY {
+        uuid key PK
+        uuid user_id
+        text request_hash
+        jsonb response
+        timestamptz created_at
     }
 ```
 
@@ -155,27 +274,38 @@ erDiagram
 | :--- | :--- |
 | `CITY` | Groups hospitals under a regional or city-wide umbrella for coordinated capacity viewing. |
 | `HOSPITAL` | Stores essential hospital information such as name, address, and facility type. |
-| `DEPARTMENT` | Represents clinical departments (e.g., General Medicine, Cardiology, Orthopaedics) that run outpatient queues. |
-| `PATIENT` | Master patient record containing registration details, contact numbers, and demographics. |
+| `DEPARTMENT` | Represents clinical departments (e.g., General Medicine, Cardiology, Orthopaedics) that run outpatient queues and may contain wards. |
+| `APP_USER` | Authenticated staff accounts with email login, Argon2id password hashes, lockout counters, and login timestamps. |
+| `USER_HOSPITAL_ROLE` | Junction table linking a user to one or more hospitals with a specific role (`FRONT_DESK`, `NURSE`, `DOCTOR`, `HOUSEKEEPING`, `BED_MANAGER`, `HOSPITAL_ADMIN`, `CITY_VIEWER`). A user can hold multiple roles across multiple hospitals. |
+| `PATIENT` | Master patient record with a unique hospital ID (UHID), demographics, phone in E.164 format, and support for patient merging (`merged_into`). Tracks who created the record (`created_by`). |
+| `WARD` | Physical ward within a hospital, typed (General, ICU, Emergency, Pediatric, Maternity), with a floor number and capacity. Optionally linked to a department. |
+| `BED` | Individual bed within a ward, with a status enum tracking its lifecycle and an isolation flag. |
 | `OPD_QUEUE` | Represents an active queue session for a specific department on a given day. |
-| `QUEUE_ENTRY` | Tracks individual patient tokens, triage priority, check-in timestamps, and queue status. |
-| `BED` | Physical bed registry detailing ward, bed category (General, ICU, Step-down), and current status. |
-| `ADMISSION` | Inpatient records linking a patient to an allocated bed, tracking admission and discharge times. |
+| `QUEUE_ENTRY` | Tracks individual patient tokens, triage priority, check-in timestamps, and queue status within an OPD queue. |
+| `BED_ASSIGNMENT` | Inpatient records linking a patient to an allocated bed, tracking who assigned it, admission and discharge timestamps, and assignment status. Partial unique indexes enforce one active assignment per bed and one active assignment per patient. |
+| `AUDIT_LOG` | Append-only, tamper-proof log of every state-changing action. Stores before/after JSONB snapshots for forensic review. DML restrictions prevent updates or deletes to this table. |
+| `IDEMPOTENCY_KEY` | Prevents duplicate writes from retried API requests. Stores the response of the first successful request so replays return the cached result without creating duplicate records. |
 
 ### Key Database & Business Rules
 
-* **One bed, one active patient:** A bed can have many historical admissions over time, but it must never have two active occupants at the same time.
-* **Explicit bed status progression:** Bed status must move through distinct states: `AVAILABLE` $\to$ `RESERVED` $\to$ `OCCUPIED` $\to$ `CLEANING` $\to$ `AVAILABLE` (with `OUT_OF_SERVICE` for maintenance). A discharged bed cannot be marked available until housekeeping confirms it has been sanitized.
-* **Deterministic queue states:** Queue entries must follow clear transitions: `WAITING` $\to$ `CALLED` $\to$ `IN_SERVICE` $\to$ `COMPLETED` (or `CANCELLED` if the patient leaves or doesn't show up).
-* **Concurrency protection:** When reserving a bed, the backend uses atomic database transactions with row-level locks (`SELECT ... FOR UPDATE`) so two staff members cannot assign the same bed simultaneously.
-* **City-wide data boundary:** In city-wide mode, each hospital maintains full ownership of its operational records. The city module only reads aggregated capacity and average wait times, never raw private patient records.
+* **One bed, one active patient:** A bed can have many historical assignments over time, but a partial unique index (`WHERE status = 'ACTIVE'`) ensures it can never have two active occupants simultaneously.
+* **One active assignment per patient:** A second partial unique index prevents a patient from being assigned to two beds at once.
+* **Explicit bed status progression:** Bed status must move through distinct states: `AVAILABLE` → `RESERVED` → `OCCUPIED` → `CLEANING` → `AVAILABLE` (with `OUT_OF_SERVICE` for maintenance). A discharged bed cannot be marked available until housekeeping confirms it has been sanitized.
+* **Deterministic queue states:** Queue entries must follow clear transitions: `WAITING` → `CALLED` → `IN_SERVICE` → `COMPLETED` (or `CANCELLED` if the patient leaves or doesn't show up).
+* **Concurrency protection:** When reserving a bed, the backend uses atomic database transactions with row-level locks (`SELECT ... FOR UPDATE SKIP LOCKED`) so two staff members cannot assign the same bed simultaneously. This is one of the operations performed via the raw `pg` database driver rather than Prisma, because Prisma's query builder cannot express `FOR UPDATE SKIP LOCKED`.
+* **Discharge constraint:** A `CHECK` constraint ensures that `discharged_at` is `NULL` when status is `ACTIVE`, and is non-null and >= `assigned_at` when status is `DISCHARGED` or `TRANSFERRED`.
+* **Audit log immutability:** The `audit_log` table has database-level DML restrictions: `UPDATE` and `DELETE` are revoked from the application database role, ensuring the log is append-only and tamper-proof.
+* **Idempotency for write operations:** Mutating API endpoints accept an `Idempotency-Key` header. The middleware checks the `idempotency_key` table and returns the cached response for duplicate requests, preventing double-writes from network retries.
+* **City-wide data boundary:** In city-wide mode, each hospital maintains full ownership of its operational records. The city module only reads aggregated capacity and average wait times via a database view, never raw private patient records.
 * **Bilateral transfer confirmation:** The city dashboard displays estimated bed availability, but an inter-hospital transfer cannot be confirmed until the receiving facility explicitly accepts the referral.
+* **User lockout:** After 5 consecutive failed login attempts, the `app_user.locked_until` timestamp is set 15 minutes in the future. Login attempts during lockout are rejected regardless of password correctness.
+* **Patient merge pointer:** When duplicate patient records are discovered, one record's `merged_into` field points to the canonical record. Downstream queries follow the pointer to resolve the active patient.
 
 ---
 
-# 2. Tech Stack — Frameworks and DBs to be Used
+# 2. Tech Stack — Frameworks, ORM & Architecture
 
-We chose a practical dual-backend architecture: **Node.js/Express** handles core business logic and database transactions, while **Python/FastAPI** is dedicated to queueing calculations and analytics. This keeps day-to-day operations fast and isolates heavier statistical math from the main API.
+We chose a practical dual-backend architecture: **Node.js/Express** with **Prisma ORM** handles core business logic and database operations, while **Python/FastAPI** is dedicated to queueing calculations and analytics. This keeps day-to-day operations fast and isolates heavier statistical math from the main API.
 
 ### Technology Choices
 
@@ -185,55 +315,217 @@ We chose a practical dual-backend architecture: **Node.js/Express** handles core
 
 * **Main Backend: Node.js + Express**
   * Handles patient registrations, OPD token generation, queue status updates, admissions, discharges, and bed state updates.
-  * Express is lightweight, fast with asynchronous I/O, and interacts directly with PostgreSQL using standard database connection pooling (`pg`).
+  * Express is lightweight and fast with asynchronous I/O. Node.js uses the **V8 JavaScript engine** for compilation and **libuv** for its non-blocking I/O event loop, allowing the server to handle thousands of concurrent connections on a single thread without blocking.
+  * **Event-driven architecture:** We use Node's built-in `EventEmitter` for in-process event dispatch. For example, when a bed is released, a `bedReleased` event is emitted, which triggers the waitlist checker to notify the next queued patient. This decouples the discharge logic from the waitlist logic without introducing an external message broker.
+  * **Streams:** For audit log exports, we use Node.js `Readable` streams to pipe large result sets directly to the HTTP response without buffering the entire JSON payload in memory. This keeps memory usage constant regardless of log size.
+  * The Express server uses Node's **`process` module** for environment variable access (`process.env`), graceful shutdown signal handling (`process.on('SIGTERM', ...)`), and health checks. The **`path` module** is used for resolving migration and static file paths. The **`fs` module** is used for reading seed data files.
+
+* **ORM & Database Access: Prisma + pg (Hybrid)**
+  * **Prisma ORM** is the primary data access layer for all standard CRUD operations. Prisma provides:
+    * **Prisma Schema** (`prisma/schema.prisma`): Declarative data model defining all entities, field types, relations, and constraints.
+    * **Prisma Models**: Typed representations of each database table, auto-generated as a Prisma Client.
+    * **Prisma Migrations** (`prisma migrate`): Version-controlled, reproducible schema changes.
+    * **Prisma Client**: Auto-generated, type-safe query builder for `create`, `findMany`, `findUnique`, `update`, `delete`, and `upsert` operations.
+    * **Prisma Relations**: Defines 1:N and M:N relationships between models (e.g., Hospital → Departments, User → UserHospitalRoles). Supports nested reads (`include`), nested creates, and relation queries.
+    * **Prisma Filtering**: Rich `where` clause API supporting `equals`, `contains`, `startsWith`, `in`, `gte`, `lte`, and compound `AND`/`OR`/`NOT` conditions.
+    * **Prisma Pagination**: Cursor-based and offset-based pagination using `skip`, `take`, and `cursor`.
+    * **Prisma Sorting**: `orderBy` on any field, including nested relation fields.
+    * **Prisma Seeding** (`prisma db seed`): Seed script for populating development databases with synthetic test data (cities, hospitals, departments, wards, beds, staff accounts with hashed passwords, and sample patients).
+  * **Raw `pg` driver** (`node-postgres`) is retained for two specific operations where Prisma's query builder cannot express the required PostgreSQL features:
+    1. **`SELECT ... FOR UPDATE SKIP LOCKED`** for atomic bed reservation inside explicit transactions. Prisma does not support `SKIP LOCKED`, which is essential for non-blocking concurrent bed assignments.
+    2. **Database role setup and RLS policy management** via raw SQL migrations.
+  * This hybrid approach demonstrates mastery of both ORM-based data access (abstraction, type safety, relation management) and raw database driver usage (connection pooling, manual transaction control, ACID guarantees) — understanding when each tool is appropriate and why.
 
 * **Analytics Backend: Python + FastAPI**
   * Handles wait-time calculations, multi-server queue modeling ($M/M/c$), clinic demand trends, and capacity simulations.
   * Python makes mathematical calculations straightforward, and FastAPI provides an ultra-fast, clean REST API that Express can call asynchronously.
 
 * **Database: Supabase PostgreSQL**
-  * Houses all data: hospital profiles, departments, patients, queue entries, beds, and admission records.
-  * Gives us ACID transaction guarantees, solid indexing, Row Level Security (RLS), and optional real-time event subscriptions without the burden of self-hosting a database instance.
+  * Houses all data: hospital profiles, departments, wards, beds, users, patients, queue entries, assignments, and audit records.
+  * Gives us ACID transaction guarantees, solid indexing, Row Level Security (RLS), partial unique indexes, check constraints, and optional real-time event subscriptions without the burden of self-hosting a database instance.
+
+### Backend Architecture: MVC Pattern
+
+The Express backend follows the **Model-View-Controller (MVC)** architectural pattern to enforce clean separation of concerns. Each layer has a single responsibility:
+
+* **Model** — Prisma schema and Prisma Client provide the data model. Raw `pg` queries supplement for concurrency-critical operations.
+* **Controller** — Thin request handlers that parse validated input, call service functions, and return formatted responses. Controllers never contain business logic or direct database queries.
+* **Service** — Business logic layer. Services orchestrate database operations (via Prisma Client or raw `pg`), enforce business rules, emit events, and return domain objects.
+* **Route** — Express Router modules that map HTTP methods and URL paths to controller functions, applying appropriate middleware.
+
+```text
+api/
+├── prisma/
+│   └── schema.prisma              # Prisma data model (all entities, relations, enums)
+├── src/
+│   ├── server.js                  # HTTP listener, graceful shutdown
+│   ├── app.js                     # Express app assembly, middleware pipeline, route mounts
+│   ├── lib/
+│   │   ├── db.js                  # pg Pool + withTransaction() helper for raw SQL
+│   │   ├── prisma.js              # Prisma Client singleton
+│   │   ├── errors.js              # Standardized error classes (httpError)
+│   │   ├── audit.js               # Append-only audit log helper
+│   │   └── events.js              # EventEmitter instance for domain events
+│   ├── middlewares/
+│   │   ├── auth.middleware.js      # JWT verification, user extraction
+│   │   ├── rbac.middleware.js      # Role-based access control & hospital scoping
+│   │   ├── validate.middleware.js  # Zod schema validation for request bodies
+│   │   ├── idempotency.middleware.js # Idempotency-Key deduplication
+│   │   └── error.middleware.js     # Centralized error handler (err, req, res, next)
+│   ├── controllers/
+│   │   ├── auth.controller.js      # Register, login, token refresh
+│   │   ├── patient.controller.js   # Patient CRUD with UHID generation
+│   │   ├── bed.controller.js       # Bed status, reservation (raw pg)
+│   │   ├── queue.controller.js     # OPD queue token management
+│   │   └── city.controller.js      # City-wide capacity aggregation
+│   ├── services/
+│   │   ├── auth.service.js         # Password hashing, lockout logic, JWT signing
+│   │   ├── patient.service.js      # Prisma queries, duplicate detection, merge
+│   │   ├── bed.service.js          # Raw pg transactions for SKIP LOCKED
+│   │   ├── queue.service.js        # Token assignment, status transitions
+│   │   ├── city.service.js         # Aggregate view queries
+│   │   └── analytics.client.js     # HTTP client for FastAPI with timeout & fallback
+│   └── routes/
+│       ├── auth.routes.js
+│       ├── patient.routes.js
+│       ├── bed.routes.js
+│       ├── queue.routes.js
+│       └── city.routes.js
+├── scripts/
+│   └── seed.js                    # Prisma seeding script
+└── test/
+    ├── auth.test.js
+    ├── patient.test.js
+    └── idempotency.test.js
+```
+
+### Middleware Pipeline
+
+The Express application assembles middleware in a strict order. Each middleware calls `next()` to pass control to the next layer, or short-circuits the chain by sending an error response. This pipeline demonstrates the Express middleware architecture covered in the AP curriculum:
+
+```mermaid
+flowchart TD
+    REQ["Incoming HTTP Request"] --> M1["1. helmet() — Security Headers"]
+    M1 --> M2["2. cors() — Origin Allow-List"]
+    M2 --> M3["3. pino-http — Structured JSON Logging + Request ID"]
+    M3 --> M4["4. express.json() — Body Parsing"]
+    M4 --> M5["5. rateLimit() — Brute-Force Protection"]
+    M5 --> M6["6. Auth Middleware — JWT Verification"]
+    M6 --> M7["7. RBAC Middleware — Role Check + Hospital Scoping"]
+    M7 --> M8["8. Validate Middleware — Zod Schema Validation"]
+    M8 --> M9["9. Route Handler — Controller Logic"]
+    M9 --> RES["HTTP Response"]
+
+    M6 -.->|"401 Unauthorized"| ERR["Centralized Error Handler"]
+    M7 -.->|"403 Forbidden"| ERR
+    M8 -.->|"400 Validation Error"| ERR
+    M9 -.->|"Thrown Error"| ERR
+    ERR --> RES
+```
+
+**Key middleware behaviors:**
+* **`helmet()`** sets security headers (`X-Content-Type-Options`, `Strict-Transport-Security`, etc.) on every response.
+* **`cors()`** restricts cross-origin requests to the configured `WEB_ORIGIN`.
+* **`pino-http`** generates a unique `request_id` (UUID) for every request, includes it in all log lines, and attaches it to `req.id` for downstream use in audit logs.
+* **`express.json()`** is Express's built-in middleware for parsing JSON request bodies.
+* **`rateLimit()`** caps requests per IP per window to prevent brute-force attacks on the login endpoint.
+* **Auth middleware** extracts the JWT from the `Authorization: Bearer <token>` header, verifies the signature and expiry, and attaches the decoded claims (`user_id`, `hospital_id`, `roles`) to `req.user`.
+* **RBAC middleware** is a factory function: `requireRole('BED_MANAGER')` returns a middleware that checks `req.user.roles` and ensures the user's active hospital matches the request's hospital scope.
+* **Validate middleware** accepts a Zod schema and validates `req.body` against it, returning a structured 400 error with field-level messages on failure.
+* **Centralized error handler** is the final `(err, req, res, next)` middleware. It catches all synchronous and asynchronous errors, logs them via Pino (sanitizing any PHI from the log output), and returns a standardized JSON error envelope: `{ error: { code, message, request_id } }`.
+
+### RESTful API Design
+
+The API follows REST architectural constraints with resource-based URLs, correct HTTP method semantics, and API versioning:
+
+| Method | Endpoint | Purpose | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/auth/register` | Create a new staff account | No |
+| `POST` | `/api/v1/auth/login` | Authenticate and receive JWT | No |
+| `GET` | `/api/v1/patients` | List patients (filtered, paginated, sorted via Prisma) | Yes |
+| `POST` | `/api/v1/patients` | Register a new patient (UHID generation) | Yes |
+| `GET` | `/api/v1/patients/:id` | Get patient by ID | Yes |
+| `PATCH` | `/api/v1/patients/:id` | Update patient details | Yes |
+| `GET` | `/api/v1/beds` | List beds by ward, status, hospital | Yes |
+| `POST` | `/api/v1/beds/:id/reserve` | Reserve a bed (raw pg transaction) | Yes (BED_MANAGER) |
+| `POST` | `/api/v1/beds/:id/discharge` | Discharge and trigger cleaning | Yes (NURSE, DOCTOR) |
+| `PATCH` | `/api/v1/beds/:id/status` | Update bed status (e.g., CLEANING → AVAILABLE) | Yes (HOUSEKEEPING) |
+| `GET` | `/api/v1/queues/:departmentId` | Get current queue for a department | Yes |
+| `POST` | `/api/v1/queues/:departmentId/join` | Patient joins queue, gets token | Yes (FRONT_DESK) |
+| `POST` | `/api/v1/queues/entries/:entryId/call` | Call next patient | Yes (DOCTOR) |
+| `GET` | `/api/v1/city/capacity` | City-wide hospital capacity summary | Yes (CITY_VIEWER) |
+| `POST` | `/api/v1/city/referrals` | Create inter-hospital referral | Yes (HOSPITAL_ADMIN) |
+
+Routes are modularized using **Express Router**. Each resource gets its own router file (e.g., `patient.routes.js`), which is mounted on the main app with a versioned prefix:
+
+```javascript
+// app.js — Route mounting with Express Router
+import { patientRouter } from './routes/patient.routes.js';
+import { authRouter }    from './routes/auth.routes.js';
+import { bedRouter }     from './routes/bed.routes.js';
+import { queueRouter }   from './routes/queue.routes.js';
+import { cityRouter }    from './routes/city.routes.js';
+
+app.use('/api/v1/auth',     authRouter);
+app.use('/api/v1/patients',  authenticate, patientRouter);
+app.use('/api/v1/beds',      authenticate, bedRouter);
+app.use('/api/v1/queues',    authenticate, queueRouter);
+app.use('/api/v1/city',      authenticate, cityRouter);
+```
 
 ### System Communication Flow
 
 ```mermaid
 flowchart TD
-    A[React Frontend]
-    B[Node.js + Express API]
-    C[(Supabase PostgreSQL)]
-    D[Python + FastAPI Analytics]
-    E[Hospital Staff Dashboard]
-    F[City-Wide Capacity Dashboard]
+    A["React Frontend"]
+    B["Node.js + Express API"]
+    P["Prisma Client"]
+    R["Raw pg Pool"]
+    C[("Supabase PostgreSQL")]
+    D["Python + FastAPI Analytics"]
+    E["Hospital Staff Dashboard"]
+    F["City-Wide Capacity Dashboard"]
 
-    A <-->|HTTP / REST JSON| B
-    B <-->|SQL Queries & Transactions| C
-    B -->|Queue Counts & Rates| D
-    D -->|Calculated Wait Estimates| B
+    A <-->|"HTTP / REST JSON"| B
+    B --> P
+    B --> R
+    P <-->|"Prisma Queries (CRUD, Relations, Filtering)"| C
+    R <-->|"Raw SQL (FOR UPDATE SKIP LOCKED, RLS)"| C
+    B -->|"Queue Counts & Rates"| D
+    D -->|"Calculated Wait Estimates"| B
     B --> E
     B --> F
 ```
 
 In this setup:
-1. The React frontend speaks exclusively to the Node.js API.
-2. Node.js executes operational updates against Supabase PostgreSQL.
-3. When wait-time predictions are needed, Node.js passes current queue metrics to FastAPI and receives estimated waiting times back.
-4. Both hospital-level and city-level dashboards receive clean, processed data from the Express backend.
+1. The React frontend speaks exclusively to the Node.js API via RESTful HTTP requests.
+2. The Express controllers call service functions, which use **Prisma Client** for all standard CRUD operations (patient lookup, user management, audit logging, department queries with filtering, pagination, and sorting).
+3. For bed reservation specifically, the service drops down to the **raw `pg` pool** to execute `SELECT ... FOR UPDATE SKIP LOCKED` inside an explicit transaction — a PostgreSQL concurrency feature that Prisma's query builder does not support.
+4. When wait-time predictions are needed, the Express server passes current queue metrics to the FastAPI analytics service and receives estimated waiting times back.
+5. Both hospital-level and city-level dashboards receive clean, processed data from the Express backend.
 
 ### Recommended Libraries & Tooling
 
 | Component | Technology | Rationale |
 | :--- | :--- | :--- |
 | **Frontend** | React, JavaScript, CSS | Reusable components, fast DOM updates, clean UI for dashboards. |
-| **Core API** | Node.js, Express | Fast asynchronous I/O, simple route handlers, solid middleware ecosystem. |
+| **Core API** | Node.js, Express 5 | Fast asynchronous I/O, middleware ecosystem, route-level modularity. |
+| **ORM** | Prisma | Type-safe queries, declarative schema, auto-generated client, built-in migrations, seeding, relation management, filtering, pagination, and sorting. |
+| **Raw DB Driver** | `pg` (node-postgres) | Connection pooling, manual transaction control, and `FOR UPDATE SKIP LOCKED` for concurrency-critical bed assignment. |
+| **Auth: Password Hashing** | Argon2 (`argon2` npm) | Memory-hard hashing algorithm resistant to GPU attacks. Uses Argon2id variant with automatic salting. |
+| **Auth: Token** | `jsonwebtoken` | Signs and verifies JWT tokens with HMAC-SHA256. |
+| **Security Headers** | `helmet` | Sets `X-Content-Type-Options`, `Strict-Transport-Security`, and other hardening headers. |
+| **CORS** | `cors` | Restricts API access to the configured frontend origin. |
+| **Rate Limiting** | `express-rate-limit` | Prevents brute-force login attacks. |
+| **Input Validation** | Zod | Schema-based request body validation with detailed error messages. |
+| **Logging** | Pino + pino-http | Structured JSON logging with request IDs, low overhead, and PHI sanitization via custom serializers. |
 | **Analytics API** | Python, FastAPI | Ideal for mathematical modeling, fast execution, automatic API docs. |
-| **Database** | Supabase PostgreSQL | Strong relational integrity, ACID compliance, zero maintenance overhead. |
-| **Database Driver** | `pg` (node-postgres) | Native PostgreSQL connection pooling and reliable transaction control. |
-| **API Testing** | Postman / curl | Easy endpoint testing and request verification. |
-| **Version Control** | Git & GitHub | Standard source control and team collaboration. |
+| **Database** | Supabase PostgreSQL | Strong relational integrity, ACID compliance, RLS, zero maintenance overhead. |
+| **API Testing** | `supertest`, `node:test` | In-process HTTP testing using Node's built-in test runner. |
+| **Version Control** | Git & GitHub | Standard source control with GitHub Actions CI. |
 | **Math Modeling** | Python `math` (NumPy optional) | Calculating Erlang-C and multi-server queue formulas. |
 
-> **A note on simplicity:** We deliberately do not include Redis, Kafka, or Docker for the initial system. Node.js combined with well-indexed PostgreSQL tables is more than fast enough for a single hospital or a simulated multi-hospital prototype. We can add caching or message brokers later if load demands it.
+> **A note on the hybrid ORM strategy:** We deliberately chose to use both Prisma and raw `pg` rather than committing to one exclusively. Prisma handles 95% of database interactions with type safety, auto-completion, and clean relation queries. The remaining 5% — specifically `SELECT ... FOR UPDATE SKIP LOCKED` for bed locking — requires raw SQL because Prisma does not yet support lock modes beyond basic `FOR UPDATE`. This mirrors real-world backend development, where teams use an ORM for productivity and drop to raw SQL only when the ORM's abstraction is insufficient. Understanding when to use each tool is a core database engineering competency.
 
 ### Queueing Model ($M/M/c$)
 
@@ -301,7 +593,7 @@ flowchart LR
 
 ### DFD Level 1 — Main System Processes
 
-This diagram breaks the system down into its six main functional processes and five logical data stores.
+This diagram breaks the system down into its seven main functional processes and six logical data stores.
 
 ```mermaid
 flowchart TB
@@ -309,6 +601,7 @@ flowchart TB
     STAFF[Hospital Staff]
     CITY[City Control Centre]
 
+    P0(("0.0 Authentication & Authorization"))
     P1(("1.0 Patient Registration"))
     P2(("2.0 OPD Queue Management"))
     P3(("3.0 Bed Availability Management"))
@@ -316,11 +609,16 @@ flowchart TB
     P5(("5.0 City-Wide Coordination"))
     P6(("6.0 Queue Analytics"))
 
+    D0[("D0 User & Role Records")]
     D1[("D1 Patient Records")]
     D2[("D2 Queue Entries")]
-    D3[("D3 Bed Inventory")]
-    D4[("D4 Admission Records")]
+    D3[("D3 Bed & Ward Inventory")]
+    D4[("D4 Assignment Records")]
     D5[("D5 Hospital Capacity Data")]
+
+    STAFF -->|"Login Credentials"| P0
+    P0 -->|"JWT Token"| STAFF
+    P0 <--> D0
 
     PAT --> P1
     P1 <--> D1
@@ -351,13 +649,14 @@ flowchart TB
 
 | Data Store | Information Stored |
 | :--- | :--- |
-| **D1: Patient Records** | Demographics, contact info, and patient ID numbers. |
+| **D0: User & Role Records** | Staff accounts (hashed passwords, lockout status), hospital-role assignments, and authentication tokens. |
+| **D1: Patient Records** | Demographics, UHIDs, contact info, merge pointers, and creation audit trail. |
 | **D2: Queue Entries** | Daily tokens, triage priority, check-in timestamps, and queue statuses. |
-| **D3: Bed Inventory** | Ward details, bed categories, current operational status, and hospital ID. |
-| **D4: Admission Records** | Active and past hospital stays, assigned bed IDs, and admission/discharge times. |
+| **D3: Bed & Ward Inventory** | Ward details, bed categories, current operational status, isolation flags, and hospital ID. |
+| **D4: Assignment Records** | Active and past bed assignments, assigned bed IDs, admission/discharge timestamps, and assigning staff. |
 | **D5: Hospital Capacity Data** | Aggregated bed counts and departmental waiting times for city-wide reporting. |
 
-*(Note: D1 through D5 are tables within the same Supabase PostgreSQL database, not five separate database engines).*
+*(Note: D0 through D5 are tables within the same Supabase PostgreSQL database, not six separate database engines).*
 
 ---
 
@@ -397,22 +696,22 @@ flowchart TD
     B --> C[Search Suitable Beds by Ward & Type]
     C --> D{Suitable Bed Available?}
     D -->|No| E[Place Patient on Admission Waitlist]
-    D -->|Yes| F[Start DB Transaction: SELECT ... FOR UPDATE]
+    D -->|Yes| F["Start DB Transaction: SELECT ... FOR UPDATE SKIP LOCKED"]
     F --> G{Lock Acquired & Bed Free?}
-    G -->|No: Booked by Another Staff| C
+    G -->|"No: Booked by Another Staff"| C
     G -->|Yes| H[Set Bed Status: RESERVED]
-    H --> I[Create Record in ADMISSION Table]
+    H --> I[Create Record in BED_ASSIGNMENT Table]
     I --> J[Confirm Bed Assignment & Commit Transaction]
-    J --> K[Patient Occupies Bed: Status $\\to$ OCCUPIED]
+    J --> K["Patient Occupies Bed: Status → OCCUPIED"]
     K --> L[Doctor Orders Discharge]
     L --> M[Record Discharge Timestamp]
     M --> N[Set Bed Status: CLEANING]
     N --> O[Housekeeping Sanitizes Bed]
     O --> P[Housekeeping Sets Status: AVAILABLE]
-    P --> Q[Update Net Capacity & Check Waitlist]
+    P --> Q["Update Net Capacity & Emit bedReleased Event"]
 ```
 
-**Preventing Double-Booking:** The critical step is `SELECT ... FOR UPDATE` inside an explicit database transaction. If two staff members try to allocate the same bed at the exact same moment, one transaction will lock the row while the other waits and safely re-checks availability.
+**Preventing Double-Booking:** The critical step is `SELECT ... FOR UPDATE SKIP LOCKED` inside an explicit database transaction, executed via the raw `pg` driver. If two staff members try to allocate the same bed at the exact same moment, `SKIP LOCKED` allows the second transaction to skip the locked row and try another available bed, instead of blocking. This is a PostgreSQL-specific concurrency feature that Prisma's query builder does not support.
 
 ---
 
@@ -432,31 +731,77 @@ flowchart TD
     H --> I[Contact Receiving Hospital for Confirmation]
     I --> J{Receiving Hospital Confirms?}
     J -->|Yes| K[Hold Bed & Dispatch Patient Transfer]
-    J -->|No / Full| H
+    J -->|"No / Full"| H
 ```
 
 For the initial prototype, Hospitals A, B, and C can simply be separate hospital records in the same Supabase database. This lets us fully demonstrate the multi-hospital dashboard without having to connect multiple physical hospital networks on day one.
 
 ---
 
-# Summary of Deliverables & Implementation Plan
+### DFD Level 2D — Authentication & Authorization
+
+This diagram shows the user authentication flow, from login through JWT-protected API access.
+
+```mermaid
+flowchart TD
+    A["Staff Submits Credentials (email + password)"] --> B{Account Exists?}
+    B -->|No| C["Return 401: Invalid credentials"]
+    B -->|Yes| D{Account Locked?}
+    D -->|"Yes: locked_until > now()"| E["Return 403: Account locked, retry after N minutes"]
+    D -->|No| F["Retrieve password_hash from DB"]
+    F --> G["Argon2id Verify (constant-time comparison)"]
+    G --> H{Password Correct?}
+    H -->|No| I["Increment failed_logins counter"]
+    I --> J{failed_logins >= 5?}
+    J -->|Yes| K["Set locked_until = now() + 15 minutes"]
+    J -->|No| C
+    K --> C
+    H -->|Yes| L["Reset failed_logins to 0, update last_login_at"]
+    L --> M["Fetch roles from user_hospital_role"]
+    M --> N["Sign JWT with claims: sub, hospital_id, roles"]
+    N --> O["Return 200: { token, expiresIn }"]
+
+    O --> P["Subsequent API Request with Authorization: Bearer token"]
+    P --> Q["Auth Middleware: Verify JWT signature & expiry"]
+    Q --> R{Valid Token?}
+    R -->|No| S["Return 401: Invalid or expired token"]
+    R -->|Yes| T["Attach user claims to req.user"]
+    T --> U["RBAC Middleware: Check req.user.roles against required role"]
+    U --> V{Has Required Role?}
+    V -->|No| W["Return 403: Insufficient permissions"]
+    V -->|Yes| X["Proceed to Route Handler"]
+```
+
+**Authentication strategy choices:**
+* **JWT (JSON Web Tokens)** is the primary authentication mechanism. The server signs a token on login containing the user's ID, active hospital, and roles. Subsequent requests include this token in the `Authorization: Bearer <token>` header. The server verifies the signature without hitting the database on every request, making it stateless and scalable.
+* **Session cookies** are the alternative approach where the server stores session state (typically in a database or Redis) and sends an `httpOnly` cookie to the browser. This approach is simpler for browser-only clients and prevents XSS-based token theft. However, it requires server-side session storage and is harder to scale across multiple API servers. For this project's REST API architecture, JWT is the better fit — but session cookies would be appropriate if the system were a traditional server-rendered application.
+* **Argon2id** is used for password hashing because it is memory-hard (resistant to GPU/ASIC attacks), provides automatic salting, and is the recommended algorithm by OWASP. The `argon2` npm package handles the hashing and constant-time verification.
+
+---
+
+# 4. Summary of Deliverables & Implementation Plan
 
 ### Deliverables Matrix
 
 | Deliverable | What We Are Delivering | Key Benefit |
 | :--- | :--- | :--- |
-| **1. ER Diagram** | 8 core entities covering cities, hospitals, departments, patients, queues, beds, and admissions. | Clean data structure that stops duplicate bed assignments and keeps patient history intact. |
-| **2. Tech Stack** | React (Frontend), Node.js + Express (Core API), Python + FastAPI (Queue Analytics), Supabase PostgreSQL (Database). | Fast daily transactions, scientific wait-time calculations, and reliable data storage with minimal setup. |
-| **3. Data Flow Diagrams** | Context (Level 0), System Processes (Level 1), OPD Queue (Level 2A), Bed Admission (Level 2B), and City Coordination (Level 2C). | Clear operational guide showing exactly how data enters, moves through, and updates across the system. |
+| **1. ER Diagram** | 13 entities covering cities, hospitals, departments, wards, beds, patients, users, roles, queues, assignments, audit logs, and idempotency keys. | Clean data structure that stops duplicate bed assignments, enforces auth, and keeps patient history intact. |
+| **2. Tech Stack** | React (Frontend), Node.js + Express with Prisma ORM (Core API), raw pg for concurrency locks, Python + FastAPI (Queue Analytics), Supabase PostgreSQL (Database). | Demonstrates both ORM mastery and raw SQL expertise, fast daily transactions, scientific wait-time calculations, and reliable data storage with zero maintenance overhead. |
+| **3. Data Flow Diagrams** | Context (Level 0), System Processes (Level 1), OPD Queue (Level 2A), Bed Admission (Level 2B), City Coordination (Level 2C), and Authentication (Level 2D). | Clear operational guide showing exactly how data enters, moves through, and updates across the system, including the full authentication pipeline. |
+| **4. Auth & Security** | Argon2id password hashing, JWT-based access control, role-based hospital scoping, account lockout, audit logging, and idempotency. | Secure, production-grade authentication demonstrating real-world security practices. |
 
 ### Suggested Build Order
 
-1. **Database Schema:** Set up the tables, foreign keys, enums, and check constraints in Supabase.
-2. **Core API:** Build the Node.js/Express endpoints for patient intake and bed management with transaction locks.
-3. **Queue Operations:** Implement token generation, calling sequences, and status updates.
-4. **Analytics Service:** Build the FastAPI service with the $M/M/c$ and Erlang-C waiting time formulas.
-5. **Frontend Screens:** Build the React interfaces (patient token screen, staff queue board, and ward bed map).
-6. **City-Wide View:** Add simulated hospital entries to verify cross-facility capacity reporting.
-7. **Testing:** Run concurrency tests on bed booking, verify no-show handling, and calibrate wait-time math against sample clinic data.
+1. **Prisma Schema & Migrations:** Define all entities in `prisma/schema.prisma`. Run `prisma migrate dev` to generate the initial migration. Apply supplementary raw SQL migrations for concurrency features (partial unique indexes, check constraints, RLS policies).
+2. **Prisma Seeding:** Write a seed script that populates the database with synthetic test data — cities, hospitals, departments, wards, beds, and staff accounts with Argon2id-hashed passwords. Run via `prisma db seed`.
+3. **Core Express Server & Middleware Pipeline:** Assemble `app.js` with helmet, cors, pino-http, express.json, rate limiter, and centralized error handler. Create `server.js` with graceful shutdown on `SIGTERM`/`SIGINT`.
+4. **Auth Routes:** Build registration (Argon2id hashing) and login (verification, lockout, JWT signing) endpoints.
+5. **Patient CRUD:** Build patient registration with atomic UHID generation, list with Prisma filtering + pagination + sorting, update, and duplicate detection.
+6. **Bed & Ward Operations:** Build bed listing with Prisma, bed reservation with raw `pg` transactions (`SELECT ... FOR UPDATE SKIP LOCKED`), discharge, and housekeeping status updates. Wire `bedReleased` EventEmitter for waitlist notification.
+7. **OPD Queue Operations:** Build token generation, calling sequences, status transitions, and no-show handling.
+8. **Analytics Service:** Build the FastAPI service with the $M/M/c$ and Erlang-C waiting time formulas. Wire the Express analytics client with timeout and local fallback.
+9. **Frontend Screens:** Build the React interfaces (login, patient registration, staff queue board, ward bed map, and city dashboard) with React Router and route guards.
+10. **City-Wide View:** Add simulated hospital entries and aggregate capacity view.
+11. **Testing & CI:** Run concurrency tests on bed booking, verify no-show handling, test auth lockout, verify idempotency, and calibrate wait-time math against sample clinic data. Ensure all tests pass in GitHub Actions CI.
 
-**Privacy Note:** We will use fake, synthetic patient data during development. Before connecting to any real patient data, the system will have full authentication, role-based access controls (RBAC), Row Level Security (RLS) on database tables, and proper healthcare data privacy safeguards.
+**Privacy Note:** We use fake, synthetic patient data during development, generated via the Prisma seed script. The system enforces authentication on every API endpoint (except registration and login), role-based access control on every resource, Row Level Security on database tables for defense-in-depth, Argon2id password hashing, and append-only audit logging. These measures are in place from day one, not deferred to a future phase.
