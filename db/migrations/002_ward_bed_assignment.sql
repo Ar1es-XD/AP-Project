@@ -51,7 +51,7 @@ create unique index bed_assignment_one_active_per_bed on bed_assignment (bed_id)
 -- one active admission per admission (will become useful once admission table exists )
 create unique index bed_assignment_one_active_per_admission on bed_assignment (admission_id) where released_at is NULL and admission_id is not NULL ;
 -- COMPOSite keys for common queries 
-create index bed_assignment_bed_id_idx on assignment(bed_id);
+create index bed_assignment_bed_id_idx on bed_assignment(bed_id);
 create index bed_assignment_admission_id_idx on bed_assignment (admission_id);
 create index bed_hospital_status_idx on bed (hospital_id,status);
 
