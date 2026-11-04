@@ -47,6 +47,8 @@ CREATE TABLE bed_assignment (
   hospital_id     uuid NOT NULL REFERENCES hospital(hospital_id),
   assigned_at     timestamptz NOT NULL DEFAULT now(),
   released_at     timestamptz,
+  CONSTRAINT bed_assignment_release_order
+    CHECK (released_at IS NULL OR released_at >= assigned_at),
   assigned_by     uuid REFERENCES app_user(user_id),
   released_by     uuid REFERENCES app_user(user_id),
   notes           text,
