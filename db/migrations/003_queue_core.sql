@@ -69,7 +69,7 @@ create index idx_queue_entry_waiting_priority on queue_entry(queue_id, priority,
 create index idx_queue_entry_patient on queue_entry(patient_id);
 
 
-create table docter_session(
+create table doctor_session(
     session_id uuid primary key default gen_random_uuid(),
     doctor_id uuid not null references app_user(user_id) on delete cascade,
     hospital_id uuid not null references hospital(hospital_id) on delete cascade,
@@ -77,26 +77,22 @@ create table docter_session(
     room_number text not null,
     status doctor_session_status not null default 'ACTIVE',
     started_at timestamptz not null default now(),
-    ended_at timestamptz   
-
+    ended_at timestamptz
 );
 
-
-create index idx_doctor_session_live on docter_session(hospital_id, status) where status = 'ACTIVE';
-
+create index idx_doctor_session_live on doctor_session(department_id, status) where status = 'ACTIVE';
 
 create table consultation_log(
-    lod_id bigint generated always as identify primary key,
+    log_id bigint generated always as identity primary key,
     entry_id uuid not null references queue_entry(entry_id) on delete cascade,
     doctor_id uuid not null references app_user(user_id) on delete cascade,
     started_at timestamptz not null,
     ended_at timestamptz not null,
     duration_seconds int not null,
     created_at timestamptz not null default now()
-
 );
 
-create index idx_consultation_log_entry on consultation_log(doctor_id, started_at);
+create index idx_consultation_log_doctor on consultation_log(doctor_id, started_at);
 
 
 
