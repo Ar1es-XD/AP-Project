@@ -9,10 +9,16 @@ const gracefulShutdown = (signal) =>{
     console.log(`Recieved ${signal},shutting down gracefully.....`);;
     const forceCloserTimer = setTimeout(() => {
         server.closeAllConnections();
+        process.exit(1);
     },10000);
     forceCloserTimer.unref();
-    server.close(()=>{
+    server.close((err)=>{
         clearTimeout(forceCloserTimer);
+        if(err){
+            console.log('Error closing server',err);
+            process.exit(1)
+        }console.log('server closed cleanly');
+        process.exit(0);
     })
 };
 
