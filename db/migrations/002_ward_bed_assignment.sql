@@ -59,7 +59,7 @@ create index bed_hospital_status_idx on bed (hospital_id,status);
 
 -- simple trigger to keep updated_at freahs 
 create or replace function set_updated_at()
-returns triger as $$ 
+returns trigger as $$ 
 begin new.updated_at =now();
 return new;
 end;
