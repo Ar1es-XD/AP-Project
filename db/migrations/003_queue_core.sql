@@ -37,10 +37,9 @@ create table queue_counter(
 
 
 create table opd_queue(
-    queue_id uuid not null primary key gen_random_uuid(),
+    queue_id uuid primary key default gen_random_uuid(),
     hospital_id uuid not null references hospital(hospital_id) on delete cascade,
     department_id uuid not null references department(department_id) on delete cascade,
-    status queue_entry_status not null default 'WAITING',
     queue_date date not null,
     status queue_status not null default 'OPEN',
     created_at timestamptz not null default now(),
