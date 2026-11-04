@@ -1,68 +1,79 @@
--- 1. Clinical Enums
-CREATE TYPE ward_type AS ENUM ('GENERAL', 'ICU', 'EMERGENCY', 'PEDIATRIC', 'MATERNITY');
-CREATE TYPE bed_status AS ENUM ('AVAILABLE', 'OCCUPIED', 'MAINTENANCE', 'RESERVED', 'CLEANING', 'OUT_OF_SERVICE');
-CREATE TYPE assignment_status AS ENUM ('ACTIVE', 'DISCHARGED', 'TRANSFERRED');
-
--- 2. Ensure department uniqueness for composite foreign keys
-ALTER TABLE department ADD CONSTRAINT uq_department_hospital_id_id UNIQUE (hospital_id, department_id);
-
--- 3. Wards Table
-CREATE TABLE ward (
-    ward_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    hospital_id UUID NOT NULL REFERENCES hospital(hospital_id) ON DELETE RESTRICT,
-    department_id UUID,
-    name VARCHAR(100) NOT NULL,
-    code VARCHAR(20) NOT NULL,
-    type ward_type NOT NULL DEFAULT 'GENERAL',
-    floor_number INTEGER NOT NULL,
-    capacity INTEGER NOT NULL CHECK (capacity > 0),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT fk_ward_department FOREIGN KEY (hospital_id, department_id) 
-        REFERENCES department(hospital_id, department_id) ON DELETE SET NULL (department_id),
-    CONSTRAINT uq_ward_hospital_id_id UNIQUE (hospital_id, ward_id),
-    CONSTRAINT uq_ward_hospital_code UNIQUE (hospital_id, code)
+create type bed_status as enum(
+    'AVAILABLE','RESERVED','OCCUPIED','CLEANING','MAINTAINCE','OUT_OF_SERVICE'
 );
-
--- 4. Beds Table
-CREATE TABLE bed (
-    bed_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    hospital_id UUID NOT NULL REFERENCES hospital(hospital_id) ON DELETE RESTRICT,
-    ward_id UUID NOT NULL,
-    bed_number VARCHAR(20) NOT NULL,
-    status bed_status NOT NULL DEFAULT 'AVAILABLE',
-    is_isolation BOOLEAN NOT NULL DEFAULT FALSE,
-    reserved_until TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT fk_bed_ward FOREIGN KEY (hospital_id, ward_id) 
-        REFERENCES ward(hospital_id, ward_id) ON DELETE RESTRICT,
-    CONSTRAINT uq_bed_hospital_id_id UNIQUE (hospital_id, bed_id),
-    CONSTRAINT uq_bed_ward_number UNIQUE (ward_id, bed_number)
+-- WARD 
+create table ward (
+    ward_id  uuid primary key default gen_random_uuid(),
+    hospital_id uuid not null references hospital(hospital_id),
+    name text not null,
+    floor text,
+    ward_type text,   
+    -- eg icu ,general wanna ask teammate kii should fix it like bed_status 
+    created_at timestamptz not null default now(),
+    unique(hospital_id,name) ,
+    unique(ward_id,hospital_id) 
 );
+create table bed(
+    bed_id uuid primary_key default gen_random_uuid(),
+    ward_id uuid not null references ward(ward_id),
+    hospital_id uuid not null references hospital(hospital_id),
+    bed_number text not null,
+    status as bed_status not null default 'AVAILABLE',
+    reserved_until timestamptz,
+    row_version integer not null default 1,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    unique(ward_id,bed_number) 
 
-CREATE INDEX idx_bed_hospital_status ON bed(hospital_id, status);
-
--- 5. Bed Assignments Table with Integrity Checks
-CREATE TABLE bed_assignment (
-    assignment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    hospital_id UUID NOT NULL REFERENCES hospital(hospital_id) ON DELETE RESTRICT,
-    bed_id UUID NOT NULL,
-    patient_id UUID NOT NULL,
-    assigned_by UUID NOT NULL REFERENCES app_user(user_id) ON DELETE RESTRICT,
-    status assignment_status NOT NULL DEFAULT 'ACTIVE',
-    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    discharged_at TIMESTAMPTZ,
-    notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT fk_assignment_bed FOREIGN KEY (hospital_id, bed_id) 
-        REFERENCES bed(hospital_id, bed_id) ON DELETE RESTRICT,
-    CONSTRAINT ck_assignment_discharge CHECK (
-        (status = 'ACTIVE' AND discharged_at IS NULL)
-        OR (status <> 'ACTIVE' AND discharged_at IS NOT NULL AND discharged_at >= assigned_at)
-    )
 );
+-- ensuring that bed belongs to same hospital as its ward 
+ALTER TABLE bed
+  ADD CONSTRAINT bed_hospital_matches_ward
+  FOREIGN KEY (ward_id, hospital_id)
+  REFERENCES ward (ward_id, hospital_id);
 
--- 6. Concurrency Protection (Prevent Double-Booking)
-CREATE UNIQUE INDEX idx_unique_active_bed_assignment ON bed_assignment(bed_id) WHERE (status = 'ACTIVE');
-CREATE UNIQUE INDEX idx_unique_active_patient_assignment ON bed_assignment(patient_id) WHERE (status = 'ACTIVE');
+
+-- bed assignment (history+current occupancy)
+create table bed_assignment(
+    assignment_id uuid primary key default gen_random_uuid,
+    bed_id uuid not null references bed(bed_id),
+    admission_id uuid,
+    hospital_id uuid not null references hospital(hospital_id),
+    released_at timestamptz,
+    assigned_by uuid references app_user(user_id),
+    released_by uuid references app_user(user_id),
+    notes text 
+
+);
+-- one active assignment per bed 
+-- this is neccesaary so no two person get sam ebed allot at that time 
+create unique index bed_assignment_one_active_per_bed on bed_assignment (bed_id) where released_at is NULL;
+-- one active admission per admission (will become useful once admission table exists )
+create unique index bed_assignment_one_active_per_admission on bed_assignment (admission_id) where released_at is NULL and admission_id is not NULL ;
+-- COMPOSite keys for common queries 
+create index bed_assignment_bed_id_idx on assignment(bed_id);
+create index bed_assignment_admission_id_idx on bed_assignment (admission_id);
+create index bed_hospital_status_idx on bed (hospital_id,status);
+
+
+
+-- simple trigger to keep updated_at freahs 
+create or replace function set_updated_at()
+returns triger as $$ 
+begin new.updated_at =now();
+return new;
+end;
+$$ language plpgsql;
+create trigger bed_status_updated_at 
+before update on bed 
+for each row 
+execute function set_updated_at();
+
+
+-- down migration 
+DROP TRIGGER IF EXISTS bed_set_updated_at ON bed;
+DROP FUNCTION IF EXISTS set_updated_at();
+DROP TABLE IF EXISTS bed_assignment;
+DROP TABLE IF EXISTS bed;
+DROP TABLE IF EXISTS ward;
+DROP TYPE IF EXISTS bed_status;
