@@ -71,7 +71,7 @@ execute function set_updated_at();
 
 
 -- down migration 
-DROP TRIGGER IF EXISTS bed_set_updated_at ON bed;
+DROP TRIGGER IF EXISTS bed_status_updated_at ON bed;
 DROP FUNCTION IF EXISTS set_updated_at();
 DROP TABLE IF EXISTS bed_assignment;
 DROP TABLE IF EXISTS bed;
