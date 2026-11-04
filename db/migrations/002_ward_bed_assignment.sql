@@ -18,7 +18,7 @@ create table bed(
     ward_id uuid not null references ward(ward_id),
     hospital_id uuid not null references hospital(hospital_id),
     bed_number text not null,
-    status as bed_status not null default 'AVAILABLE',
+    status bed_status not null default 'AVAILABLE',
     reserved_until timestamptz,
     row_version integer not null default 1,
     created_at timestamptz not null default now(),
