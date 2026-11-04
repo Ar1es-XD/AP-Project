@@ -14,7 +14,7 @@ create table ward (
     unique(ward_id,hospital_id) 
 );
 create table bed(
-    bed_id uuid primary_key default gen_random_uuid(),
+    bed_id uuid primary key default gen_random_uuid(),
     ward_id uuid not null references ward(ward_id),
     hospital_id uuid not null references hospital(hospital_id),
     bed_number text not null,
