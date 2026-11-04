@@ -3,7 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 export const app = express();
 app.use(helmet());
-app(cors({origin: process.env.WEB_ORIGIN || 'http://localhost:5173',credentials: true,}));
+app.use(cors({origin: process.env.WEB_ORIGIN || 'http://localhost:5173',credentials: true,}));
 app.use(express.json({ limit: '1mb'}));
 app.get('/health',(req,res)=>{
     res.status(200).json({
