@@ -1,5 +1,5 @@
 create type bed_status as enum(
-    'AVAILABLE','RESERVED','OCCUPIED','CLEANING','MAINTAINCE','OUT_OF_SERVICE'
+    'AVAILABLE','RESERVED','OCCUPIED','CLEANING','MAINTENANCE','OUT_OF_SERVICE'
 );
 -- WARD 
 create table ward (
