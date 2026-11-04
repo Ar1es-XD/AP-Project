@@ -1,76 +1,88 @@
-create type bed_status as enum(
-    'AVAILABLE','RESERVED','OCCUPIED','CLEANING','MAINTENANCE','OUT_OF_SERVICE'
+-- Up Migration
+
+-- Bed status enum
+CREATE TYPE bed_status AS ENUM (
+  'AVAILABLE',
+  'RESERVED',
+  'OCCUPIED',
+  'CLEANING',
+  'MAINTENANCE',
+  'OUT_OF_SERVICE'
 );
--- WARD 
-create table ward (
-    ward_id  uuid primary key default gen_random_uuid(),
-    hospital_id uuid not null references hospital(hospital_id),
-    name text not null,
-    floor text,
-    ward_type text,   
-    -- eg icu ,general wanna ask teammate kii should fix it like bed_status 
-    created_at timestamptz not null default now(),
-    unique(hospital_id,name) ,
-    unique(ward_id,hospital_id) 
+
+-- Ward
+CREATE TABLE ward (
+  ward_id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  hospital_id     uuid NOT NULL REFERENCES hospital(hospital_id),
+  name            text NOT NULL,
+  floor           text,
+  ward_type       text,                    -- e.g. ICU, General, Pediatric
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (hospital_id, name),
+  UNIQUE (ward_id, hospital_id)
 );
-create table bed(
-    bed_id uuid primary key default gen_random_uuid(),
-    ward_id uuid not null references ward(ward_id),
-    hospital_id uuid not null references hospital(hospital_id),
-    bed_number text not null,
-    status bed_status not null default 'AVAILABLE',
-    reserved_until timestamptz,
-    row_version integer not null default 1,
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now(),
-    unique(ward_id,bed_number) 
 
+-- Bed
+CREATE TABLE bed (
+  bed_id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ward_id         uuid NOT NULL,
+  hospital_id     uuid NOT NULL REFERENCES hospital(hospital_id),
+  bed_number      text NOT NULL,
+  status          bed_status NOT NULL DEFAULT 'AVAILABLE',
+  reserved_until  timestamptz,
+  row_version     integer NOT NULL DEFAULT 1,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+
+  UNIQUE (ward_id, bed_number),
+  UNIQUE (bed_id, hospital_id),
+  CONSTRAINT bed_hospital_matches_ward FOREIGN KEY (ward_id, hospital_id) REFERENCES ward (ward_id, hospital_id)
 );
--- ensuring that bed belongs to same hospital as its ward 
-ALTER TABLE bed
-  ADD CONSTRAINT bed_hospital_matches_ward
-  FOREIGN KEY (ward_id, hospital_id)
-  REFERENCES ward (ward_id, hospital_id);
 
-
--- bed assignment (history+current occupancy)
-create table bed_assignment(
-    assignment_id uuid primary key default gen_random_uuid,
-    bed_id uuid not null references bed(bed_id),
-    admission_id uuid,
-    hospital_id uuid not null references hospital(hospital_id),
-    released_at timestamptz,
-    assigned_by uuid references app_user(user_id),
-    released_by uuid references app_user(user_id),
-    notes text 
-
+-- Bed assignment (history + current occupancy)
+CREATE TABLE bed_assignment (
+  assignment_id   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bed_id          uuid NOT NULL,
+  admission_id    uuid,                    -- will be filled when admission table exists
+  hospital_id     uuid NOT NULL REFERENCES hospital(hospital_id),
+  assigned_at     timestamptz NOT NULL DEFAULT now(),
+  released_at     timestamptz,
+  assigned_by     uuid REFERENCES app_user(user_id),
+  released_by     uuid REFERENCES app_user(user_id),
+  notes           text,
+  CONSTRAINT bed_assignment_hospital_matches_bed FOREIGN KEY (bed_id, hospital_id) REFERENCES bed (bed_id, hospital_id)
 );
--- one active assignment per bed 
--- this is neccesaary so no two person get sam ebed allot at that time 
-create unique index bed_assignment_one_active_per_bed on bed_assignment (bed_id) where released_at is NULL;
--- one active admission per admission (will become useful once admission table exists )
-create unique index bed_assignment_one_active_per_admission on bed_assignment (admission_id) where released_at is NULL and admission_id is not NULL ;
--- COMPOSite keys for common queries 
-create index bed_assignment_bed_id_idx on bed_assignment(bed_id);
-create index bed_assignment_admission_id_idx on bed_assignment (admission_id);
-create index bed_hospital_status_idx on bed (hospital_id,status);
 
+-- One active assignment per bed
+CREATE UNIQUE INDEX bed_assignment_one_active_per_bed
+  ON bed_assignment (bed_id)
+  WHERE released_at IS NULL;
 
+-- One active assignment per admission (will become useful once admission table exists)
+CREATE UNIQUE INDEX bed_assignment_one_active_per_admission
+  ON bed_assignment (admission_id)
+  WHERE released_at IS NULL AND admission_id IS NOT NULL;
 
--- simple trigger to keep updated_at freahs 
-create or replace function set_updated_at()
-returns trigger as $$ 
-begin new.updated_at =now();
-return new;
-end;
-$$ language plpgsql;
-create trigger bed_status_updated_at 
-before update on bed 
-for each row 
-execute function set_updated_at();
+-- Composite indexes for common queries
+CREATE INDEX bed_assignment_bed_id_idx ON bed_assignment (bed_id);
+CREATE INDEX bed_assignment_admission_id_idx ON bed_assignment (admission_id);
+CREATE INDEX bed_hospital_status_idx ON bed (hospital_id, status);
 
+-- Trigger to keep bed.updated_at fresh
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
--- down migration 
+CREATE TRIGGER bed_status_updated_at
+  BEFORE UPDATE ON bed
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+-- Down Migration
 DROP TRIGGER IF EXISTS bed_status_updated_at ON bed;
 DROP FUNCTION IF EXISTS set_updated_at();
 DROP TABLE IF EXISTS bed_assignment;
