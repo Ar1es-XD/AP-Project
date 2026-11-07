@@ -336,8 +336,11 @@ We chose a practical dual-backend architecture: **Node.js/Express** with **Prism
   * This hybrid approach demonstrates mastery of both ORM-based data access (abstraction, type safety, relation management) and raw database driver usage (connection pooling, manual transaction control, ACID guarantees) — understanding when each tool is appropriate and why.
 
 * **Analytics Backend: Python + FastAPI**
-  * Handles wait-time calculations, multi-server queue modeling ($M/M/c$), clinic demand trends, and capacity simulations.
-  * Python makes mathematical calculations straightforward, and FastAPI provides an ultra-fast, clean REST API that Express can call asynchronously.
+  * Houses three specialized domain analytics engines to isolate compute-heavy mathematical and predictive models from the main transactional Express API:
+    1. **Inpatient Bed & Depletion Forecasting Engine:** Models Average Length of Stay (ALOS) via Poisson/Weibull distributions and forecasts ward exhaustion timelines based on admission velocity and discharge schedules.
+    2. **OPD Queue & Wait-Time Engine:** Implements the $M/M/c$ multi-server queueing model using the Erlang-C formula, dynamic triage priority aging, and doctor saturation monitoring.
+    3. **Regional Healthcare Strain & Referral Optimizer:** Calculates a multi-hospital Healthcare Strain Index (HSI) and executes distance-weighted load balancing to recommend optimal patient referrals during local capacity surges.
+  * Python makes mathematical calculations and statistical distributions straightforward, while FastAPI provides an asynchronous, high-throughput REST API with automatic OpenAPI documentation that Express calls over secure internal HTTP with shared secret authentication.
 
 * **Database: Supabase PostgreSQL**
   * Houses all data: hospital profiles, departments, wards, beds, users, patients, queue entries, assignments, and audit records.
@@ -353,49 +356,85 @@ The Express backend follows the **Model-View-Controller (MVC)** architectural pa
 * **Route** — Express Router modules that map HTTP methods and URL paths to controller functions, applying appropriate middleware.
 
 ```text
-api/
-├── prisma/
-│   └── schema.prisma              # Prisma data model (all entities, relations, enums)
-├── src/
-│   ├── server.js                  # HTTP listener, graceful shutdown
-│   ├── app.js                     # Express app assembly, middleware pipeline, route mounts
-│   ├── lib/
-│   │   ├── db.js                  # pg Pool + withTransaction() helper for raw SQL
-│   │   ├── prisma.js              # Prisma Client singleton
-│   │   ├── errors.js              # Standardized error classes (httpError)
-│   │   ├── audit.js               # Append-only audit log helper
-│   │   └── events.js              # EventEmitter instance for domain events
-│   ├── middlewares/
-│   │   ├── auth.middleware.js      # JWT verification, user extraction
-│   │   ├── rbac.middleware.js      # Role-based access control & hospital scoping
-│   │   ├── validate.middleware.js  # Zod schema validation for request bodies
-│   │   ├── idempotency.middleware.js # Idempotency-Key deduplication
-│   │   └── error.middleware.js     # Centralized error handler (err, req, res, next)
-│   ├── controllers/
-│   │   ├── auth.controller.js      # Register, login, token refresh
-│   │   ├── patient.controller.js   # Patient CRUD with UHID generation
-│   │   ├── bed.controller.js       # Bed status, reservation (raw pg)
-│   │   ├── queue.controller.js     # OPD queue token management
-│   │   └── city.controller.js      # City-wide capacity aggregation
-│   ├── services/
-│   │   ├── auth.service.js         # Password hashing, lockout logic, JWT signing
-│   │   ├── patient.service.js      # Prisma queries, duplicate detection, merge
-│   │   ├── bed.service.js          # Raw pg transactions for SKIP LOCKED
-│   │   ├── queue.service.js        # Token assignment, status transitions
-│   │   ├── city.service.js         # Aggregate view queries
-│   │   └── analytics.client.js     # HTTP client for FastAPI with timeout & fallback
-│   └── routes/
-│       ├── auth.routes.js
-│       ├── patient.routes.js
-│       ├── bed.routes.js
-│       ├── queue.routes.js
-│       └── city.routes.js
-├── scripts/
-│   └── seed.js                    # Prisma seeding script
-└── test/
-    ├── auth.test.js
-    ├── patient.test.js
-    └── idempotency.test.js
+ap-project/
+├── api/                           # Core Node.js / Express 5 API
+│   ├── prisma/
+│   │   └── schema.prisma          # Prisma data model (all entities, relations, enums)
+│   ├── src/
+│   │   ├── server.js              # HTTP listener, graceful shutdown
+│   │   ├── app.js                 # Express app assembly, middleware pipeline, route mounts
+│   │   ├── lib/
+│   │   │   ├── db.js              # pg Pool + withTransaction() helper for raw SQL
+│   │   │   ├── prisma.js          # Prisma Client singleton
+│   │   │   ├── errors.js          # Standardized error classes (httpError)
+│   │   │   ├── audit.js           # Append-only audit log helper
+│   │   │   └── events.js          # EventEmitter instance for domain events
+│   │   ├── middlewares/
+│   │   │   ├── auth.middleware.js # JWT verification, user extraction
+│   │   │   ├── rbac.middleware.js # Role-based access control & hospital scoping
+│   │   │   ├── validate.middleware.js # Zod schema validation for request bodies
+│   │   │   ├── idempotency.middleware.js # Idempotency-Key deduplication
+│   │   │   └── error.middleware.js # Centralized error handler (err, req, res, next)
+│   │   ├── controllers/
+│   │   │   ├── auth.controller.js # Register, login, token refresh (Person C)
+│   │   │   ├── patient.controller.js # Patient CRUD with UHID generation (Person C)
+│   │   │   ├── bed.controller.js  # Bed status, reservation with SKIP LOCKED (Person A)
+│   │   │   ├── queue.controller.js# OPD queue token management (Person B)
+│   │   │   └── city.controller.js # City-wide capacity aggregation (Person C)
+│   │   ├── services/
+│   │   │   ├── auth.service.js    # Password hashing, lockout logic, JWT signing
+│   │   │   ├── patient.service.js # Prisma queries, duplicate detection, merge
+│   │   │   ├── bed.service.js     # Raw pg transactions for SKIP LOCKED
+│   │   │   ├── queue.service.js   # Token assignment, status transitions
+│   │   │   ├── city.service.js    # Aggregate view queries
+│   │   │   └── analytics.client.js# HTTP client for FastAPI with timeout & fallback
+│   │   └── routes/
+│   │       ├── auth.routes.js
+│   │       ├── patient.routes.js
+│   │       ├── bed.routes.js
+│   │       ├── queue.routes.js
+│   │       └── city.routes.js
+│   └── test/
+│       ├── auth.test.js
+│       ├── patient.test.js
+│       └── idempotency.test.js
+├── analytics/                     # Python 3 + FastAPI Microservice
+│   ├── main.py                    # Microservice setup, secret guard, route mounts (Person C)
+│   ├── requirements.txt
+│   ├── core/
+│   │   ├── bed_analytics.py       # Length of Stay & Bed Depletion Models (Person A)
+│   │   ├── queue_engine.py        # Erlang-C & Multi-Server Queue Math (Person B)
+│   │   └── city_analytics.py      # Strain Index & Optimization Routing (Person C)
+│   ├── routers/
+│   │   ├── bed_router.py          # Bed forecast & turnover endpoints (Person A)
+│   │   ├── queue_router.py        # Queue estimate & saturation endpoints (Person B)
+│   │   └── city_router.py         # Regional strain & referral endpoints (Person C)
+│   └── tests/
+│       ├── test_bed_analytics.py  # Pytest suite for Inpatient Models (Person A)
+│       ├── test_queue_engine.py   # Pytest suite for Erlang-C Math (Person B)
+│       └── test_city_analytics.py # Pytest suite for Regional Optimization (Person C)
+├── web/                           # React + Vite Frontend
+│   ├── src/
+│   │   ├── styles/
+│   │   │   ├── tokens.css         # Root design tokens & typography scale (Person C)
+│   │   │   ├── layout.css         # App shell & form input styling (Person C)
+│   │   │   ├── beds.css           # Ward maps & bed cards grid layout (Person A)
+│   │   │   └── queue.css          # Queue board & public TV display styling (Person B)
+│   │   ├── components/
+│   │   │   ├── layout/            # App shell, nav, sidebar (Person C)
+│   │   │   ├── beds/              # Ward map, bed cards, admit/discharge modals (Person A)
+│   │   │   ├── queue/             # Calling console, public kiosk, token slip (Person B)
+│   │   │   └── auth/              # Login form, lockout banner (Person C)
+│   │   └── hooks/
+│   │       ├── useBedManagement.js# Ward bed state & optimistic updates (Person A)
+│   │       ├── useQueue.js        # Queue state & polling handler (Person B)
+│   │       └── useAuth.jsx        # JWT session & protected route state (Person C)
+└── db/
+    └── migrations/                # node-pg-migrate versioned SQL migrations
+        ├── 001_identity_core.sql
+        ├── 002_ward_bed_assignment.sql
+        ├── 003_queue_core.sql
+        └── 004_roles_and_rls.sql
 ```
 
 ### Middleware Pipeline
@@ -528,9 +567,19 @@ In this setup:
 
 > **A note on the hybrid ORM strategy:** We deliberately chose to use both Prisma and raw `pg` rather than committing to one exclusively. Prisma handles 95% of database interactions with type safety, auto-completion, and clean relation queries. The remaining 5% — specifically `SELECT ... FOR UPDATE SKIP LOCKED` for bed locking — requires raw SQL because Prisma does not yet support lock modes beyond basic `FOR UPDATE`. This mirrors real-world backend development, where teams use an ORM for productivity and drop to raw SQL only when the ORM's abstraction is insufficient. Understanding when to use each tool is a core database engineering competency.
 
-### Queueing Model ($M/M/c$)
+### Predictive & Analytical Models (Python Analytics Microservice)
 
-Rather than giving patients rough, static estimates (like multiplying remaining tokens by an arbitrary 10 minutes), the Python service implements an **$M/M/c$ multi-server queueing model**:
+The Python microservice encapsulates three specialized mathematical models, providing real-time decision support for admissions, queues, and city coordination:
+
+#### 1. Inpatient Bed Turnover & Depletion Forecasting (Person A: Ishika)
+Rather than relying on static bed counts, the system forecasts bed exhaustion and average length of stay (ALOS):
+* **ALOS Modeling:** Uses historical admission-to-discharge data modeled over a log-normal distribution to compute expected patient stay durations per ward type.
+* **Time-to-Exhaustion Forecasting:** Compares the rolling admission rate $\lambda_{\text{admit}}$ with scheduled discharges $\mu_{\text{discharge}}$. Given available beds $B_{\text{free}}$, time until 100% capacity is projected as:
+
+$$T_{\text{exhaustion}} = \frac{B_{\text{free}}}{\lambda_{\text{admit}} - \mu_{\text{discharge}}} \quad (\text{for } \lambda_{\text{admit}} > \mu_{\text{discharge}})$$
+
+#### 2. Outpatient Queueing Model ($M/M/c$ and Erlang-C) (Person B: Aarpan)
+Rather than giving patients rough, static estimates (like multiplying remaining tokens by an arbitrary 10 minutes), the service implements an **$M/M/c$ multi-server queueing model**:
 * Arrivals follow a Poisson process with average arrival rate $\lambda$ (patients arriving per hour).
 * Doctor consultation times follow an exponential distribution with average service rate $\mu$ (patients seen per hour per doctor).
 * $c$ represents the number of doctors actively taking patients in that department.
@@ -539,7 +588,7 @@ The utilization rate $\rho$ is calculated as:
 
 $$\rho = \frac{\lambda}{c \cdot \mu}$$
 
-For a queue to stay stable and avoid backing up indefinitely, utilization must remain under 1 ($\rho < 1$). If $\rho \ge 1$, the clinic is falling behind, and the system can notify staff that another doctor is needed.
+For a queue to stay stable and avoid backing up indefinitely, utilization must remain under 1 ($\rho < 1$). If $\rho \ge 1$, the clinic is falling behind, and the system notifies staff that another doctor session is required.
 
 To project expected wait times, the service calculates the probability that an arriving patient has to wait using the **Erlang-C formula**:
 
@@ -551,7 +600,19 @@ The expected waiting time in the queue ($W_q$) is then:
 
 $$W_q = \frac{P_Q}{c\mu(1-\rho)}$$
 
-In practice, these formulas give a solid baseline that we refine with a 30-to-60 minute rolling average of actual consultation times as the day progresses.
+In practice, these formulas provide a mathematical baseline refined with a 30-to-60 minute rolling average of actual consultation times and priority aging offsets.
+
+#### 3. Regional Healthcare Strain Index (HSI) & Referral Optimization (Person C: Chinmaya)
+To coordinate patient flows across multiple facilities, the service computes a unified Regional Strain Index and recommends optimal inter-hospital transfers:
+* **Healthcare Strain Index (HSI):** A normalized composite score ($0 \le \text{HSI} \le 1$) weighted across critical care resources:
+
+$$\text{HSI} = w_{\text{icu}} \cdot \left(\frac{\text{ICU}_{\text{occupied}}}{\text{ICU}_{\text{total}}}\right) + w_{\text{opd}} \cdot \min(1, \rho) + w_{\text{ward}} \cdot \left(\frac{\text{Ward}_{\text{occupied}}}{\text{Ward}_{\text{total}}}\right)$$
+
+* **Optimal Transfer Recommendation:** When a hospital's HSI exceeds emergency thresholds ($\text{HSI} > 0.85$), the optimizer scores neighboring facilities by balancing target facility available capacity $C_j$ against patient transit distance $D_{ij}$:
+
+$$\text{Score}_j = \frac{C_{j, \text{free}}}{1 + \alpha \cdot D_{ij}}$$
+
+The facility with the highest score is automatically suggested as the primary referral destination.
 
 ---
 
@@ -790,7 +851,7 @@ flowchart TD
 | Deliverable | What We Are Delivering | Key Benefit |
 | :--- | :--- | :--- |
 | **1. ER Diagram** | 13 entities covering cities, hospitals, departments, wards, beds, patients, users, roles, queues, assignments, audit logs, and idempotency keys. | Clean data structure that stops duplicate bed assignments, enforces auth, and keeps patient history intact. |
-| **2. Tech Stack** | React (Frontend), Node.js + Express with Prisma ORM (Core API), raw pg for concurrency locks, Python + FastAPI (Queue Analytics), Supabase PostgreSQL (Database). | Demonstrates both ORM mastery and raw SQL expertise, fast daily transactions, scientific wait-time calculations, and reliable data storage with zero maintenance overhead. |
+| **2. Tech Stack** | React (Frontend), Node.js + Express with Prisma ORM (Core API), raw pg for concurrency locks, Python + FastAPI (Triple-Engine Analytics), Supabase PostgreSQL (Database). | Demonstrates both ORM mastery and raw SQL expertise, fast daily transactions, scientific wait-time calculations, predictive bed forecasting, regional strain optimization, and strictly equal 33.3% technical distribution across HTML, CSS, JS, and Python among all 3 team members. |
 | **3. Data Flow Diagrams** | Context (Level 0), System Processes (Level 1), OPD Queue (Level 2A), Bed Admission (Level 2B), City Coordination (Level 2C), and Authentication (Level 2D). | Clear operational guide showing exactly how data enters, moves through, and updates across the system, including the full authentication pipeline. |
 | **4. Auth & Security** | Argon2id password hashing, JWT-based access control, role-based hospital scoping, account lockout, audit logging, and idempotency. | Secure, production-grade authentication demonstrating real-world security practices. |
 
@@ -803,7 +864,7 @@ flowchart TD
 5. **Patient CRUD:** Build patient registration with atomic UHID generation, list with Prisma filtering + pagination + sorting, update, and duplicate detection (including cycle and self-link checks on merges).
 6. **Bed & Ward Operations:** Build bed listing with Prisma, bed reservation with raw `pg` transactions (`SELECT ... FOR UPDATE SKIP LOCKED`), discharge, and housekeeping status updates. Wire `bedReleased` EventEmitter for waitlist notification.
 7. **OPD Queue Operations:** Build token generation, calling sequences, status transitions, and no-show handling.
-8. **Analytics Service:** Build the FastAPI service with the $M/M/c$ and Erlang-C waiting time formulas. Wire the Express analytics client with timeout, HTTPS/TLS verification, and local fallback.
+8. **Analytics Service (Python + FastAPI):** Build the FastAPI microservice housing the three domain analytical engines: 1) Inpatient bed turnover & ALOS forecasting (`bed_analytics.py` - Ishika), 2) Multi-server Erlang-C wait-time queue modeling (`queue_engine.py` - Aarpan), and 3) Regional Healthcare Strain Index & referral optimization (`city_analytics.py` - Chinmaya). Wire the Express analytics client with timeout, HTTPS/TLS verification, and local statistical fallback. Verify all three engines with dedicated Pytest test suites.
 9. **Frontend Screens:** Build the React interfaces (login, patient registration, staff queue board, ward bed map, and city dashboard) with React Router and route guards.
 10. **City-Wide View:** Add simulated hospital entries and aggregate capacity view.
 11. **Testing & CI:** Run concurrency tests on bed booking, verify no-show handling, test auth lockout, verify idempotency, and calibrate wait-time math against sample clinic data. Ensure all tests pass in GitHub Actions CI.
