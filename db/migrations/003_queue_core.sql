@@ -24,9 +24,6 @@ create type doctor_session_status as enum(
 
 );
 
-
-
-
 create table queue_counter(
     department_id uuid not null references department(department_id) on delete cascade,
     queue_date date not null,
@@ -34,7 +31,6 @@ create table queue_counter(
     last_updated_at timestamptz not null default now(),
     primary key (department_id, queue_date)
 );
-
 
 create table opd_queue(
     queue_id uuid primary key default gen_random_uuid(),
@@ -95,7 +91,6 @@ create table consultation_log(
 create index idx_consultation_log_doctor on consultation_log(doctor_id, started_at);
 
 
-
 -- Down Migration
 DROP TABLE IF EXISTS consultation_log CASCADE;
 DROP TABLE IF EXISTS doctor_session CASCADE;
@@ -107,3 +102,4 @@ DROP TYPE IF EXISTS doctor_session_status;
 DROP TYPE IF EXISTS queue_priority;
 DROP TYPE IF EXISTS queue_entry_status;
 DROP TYPE IF EXISTS queue_status;
+
