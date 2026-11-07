@@ -574,9 +574,11 @@ The Python microservice encapsulates three specialized mathematical models, prov
 #### 1. Inpatient Bed Turnover & Depletion Forecasting (Person A: Ishika)
 Rather than relying on static bed counts, the system forecasts bed exhaustion and average length of stay (ALOS):
 * **ALOS Modeling:** Uses historical admission-to-discharge data modeled over a log-normal distribution to compute expected patient stay durations per ward type.
-* **Time-to-Exhaustion Forecasting:** Compares the rolling admission rate $\lambda_{\text{admit}}$ with scheduled discharges $\mu_{\text{discharge}}$. Given available beds $B_{\text{free}}$, time until 100% capacity is projected as:
+* **Time-to-Exhaustion Forecasting:** Compares the rolling admission rate $\lambda_{\text{admit}}$ with expected discharges $\mu_{\text{discharge}}$. As a constant-rate first-order approximation, given currently available beds $B_{\text{free}}$, time until 100% capacity is projected as:
 
 $$T_{\text{exhaustion}} = \frac{B_{\text{free}}}{\lambda_{\text{admit}} - \mu_{\text{discharge}}} \quad (\text{for } \lambda_{\text{admit}} > \mu_{\text{discharge}})$$
+
+In the operational engine, this constant-rate baseline is refined by evaluating discrete scheduled discharge times across the active inpatient census.
 
 #### 2. Outpatient Queueing Model ($M/M/c$ and Erlang-C) (Person B: Aarpan)
 Rather than giving patients rough, static estimates (like multiplying remaining tokens by an arbitrary 10 minutes), the service implements an **$M/M/c$ multi-server queueing model**:
@@ -608,11 +610,15 @@ To coordinate patient flows across multiple facilities, the service computes a u
 
 $$\text{HSI} = w_{\text{icu}} \cdot \left(\frac{\text{ICU}_{\text{occupied}}}{\text{ICU}_{\text{total}}}\right) + w_{\text{opd}} \cdot \min(1, \rho) + w_{\text{ward}} \cdot \left(\frac{\text{Ward}_{\text{occupied}}}{\text{Ward}_{\text{total}}}\right)$$
 
-* **Optimal Transfer Recommendation:** When a hospital's HSI exceeds emergency thresholds ($\text{HSI} > 0.85$), the optimizer scores neighboring facilities by balancing target facility available capacity $C_j$ against patient transit distance $D_{ij}$:
+*Resource Availability Handling:*
+  * For facilities or clinics without an intensive care unit ($\text{ICU}_{\text{total}} = 0$), the ICU term is omitted and weights are re-normalized so that $w_{\text{opd}} + w_{\text{ward}} = 1.0$.
+  * If an OPD queue has waiting patients ($Q > 0$) but zero active doctors ($c = 0$), the service rate is zero and utilization is set to maximum saturation ($\min(1, \rho) = 1.0$).
 
-$$\text{Score}_j = \frac{C_{j, \text{free}}}{1 + \alpha \cdot D_{ij}}$$
+* **Optimal Transfer Recommendation:** When a hospital's HSI exceeds emergency thresholds ($\text{HSI} > 0.85$), the optimizer scores candidate facilities that have verified available capacity ($C_{j, \text{free}} > 0$) by balancing available beds against patient transit distance $D_{ij}$:
 
-The facility with the highest score is automatically suggested as the primary referral destination.
+$$\text{Score}_j = \frac{C_{j, \text{free}}}{1 + \alpha \cdot D_{ij}} \quad (\text{for } C_{j, \text{free}} > 0)$$
+
+The eligible facility with the highest positive score is recommended as the primary referral destination. If no candidate facility has available capacity ($C_{j, \text{free}} = 0$ for all facilities), the algorithm returns an explicit "No Capacity Available" warning to escalate to emergency dispatch.
 
 ---
 

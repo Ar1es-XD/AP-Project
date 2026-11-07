@@ -50,8 +50,8 @@ analytics/
      * **Average Length of Stay (ALOS) & Turnover Modeling:** Calculates ward-level turnover rate and expected stay durations modeled via log-normal/Poisson arrival-stay functions.
      * **Ward Depletion & Surge Forecast:** Predicts time-to-zero bed exhaustion based on admission inflow rates and scheduled discharge cohorts.
    * **Endpoints:**
-     * `POST /analytics/beds/occupancy-forecast`
-     * `POST /analytics/beds/turnover-prediction`
+     * `POST /analytics/beds/forecast`
+     * `POST /analytics/beds/turnover`
    * **Automated Tests:** `analytics/tests/test_bed_analytics.py` (Tests zero-capacity limits, high turnover variance, edge cases where discharge rate $\ge$ admission rate).
 
 2. **Person B: Aarpan (OPD Queueing & Erlang-C Modeling)**
@@ -70,7 +70,7 @@ analytics/
      * **City-Wide Healthcare Strain Index (HSI):** Multi-factor weighted composite scoring model combining ICU utilization, emergency bed saturation, and average OPD queue lag across city hospitals.
      * **Optimal Patient Referral Routing Algorithm:** Distance-weighted capacity optimization that calculates best target hospital for patient transfers to minimize mortality risk and regional load imbalance.
    * **Endpoints:**
-     * `POST /analytics/city/strain-index`
+     * `POST /analytics/city/strain`
      * `POST /analytics/city/recommend-referral`
      * `GET /health` (Service health & runtime configuration verification)
    * **Automated Tests:** `analytics/tests/test_city_analytics.py` (Tests weighted strain matrix, zero-bed edge cases across multiple facilities, outlier smoothing).

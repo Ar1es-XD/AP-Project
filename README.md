@@ -115,31 +115,32 @@ ap-project/
 * **PostgreSQL** 16+ (or a remote Supabase instance)
 
 ### 4.2. Database Setup & Migrations
+From the repository root:
 1. Copy the environment configuration:
    ```bash
    cp api/.env.example api/.env
    ```
 2. Configure `DATABASE_URL` in `api/.env`.
-3. Run migrations using `node-pg-migrate`:
+3. Install dependencies and run migrations:
    ```bash
    cd api
-   npx node-pg-migrate -m ../db/migrations up
+   npm install
+   npm run migrate up
    ```
-4. Synchronize Prisma models:
+4. Synchronize Prisma models (once database connection is established):
    ```bash
    npx prisma db pull
    npx prisma generate
    ```
 
 ### 4.3. Starting the Node.js API
+From the `api/` directory:
 ```bash
-cd api
-npm install
 npm run dev
-# Server listening on http://localhost:3000
+# Server listening on http://localhost:4000
 ```
 
-### 4.4. Starting the Python Analytics Service
+### 4.4. Starting the Python Analytics Service (Phase 2)
 ```bash
 cd analytics
 python3 -m venv venv
@@ -162,12 +163,12 @@ uvicorn main:app --reload --port 8000
 
 ## 6. Testing & CI/CD
 
-The repository includes a complete automated test suite verified on every pull request via **GitHub Actions** (`.github/workflows/ci.yml`):
-* **API Integration Tests:** Supertest suites testing authentication, rate-limiting, and tenant isolation:
+The repository includes automated testing verified on every pull request via **GitHub Actions** (`.github/workflows/ci.yml`):
+* **API Integration Tests:** In-process Node test runner suites testing authentication, rate-limiting, and tenant isolation:
   ```bash
   cd api && npm test
   ```
-* **Python Mathematical Tests:** Pytest suites testing Erlang-C calculations, ALOS models, and regional load-balancing:
+* **Python Mathematical Tests (Phase 2):** Pytest suites testing Erlang-C calculations, ALOS models, and regional load-balancing.
   ```bash
   cd analytics && pytest
   ```
