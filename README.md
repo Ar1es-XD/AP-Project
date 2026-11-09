@@ -45,7 +45,7 @@ To satisfy academic rubric requirements, every teammate owns one operational dom
 | **Person B**<br>**Aarpan** | **OPD Queue & Wait-Time Analytics** | Doctor calling console, public waiting-room kiosk layout (tokens only, zero PHI), digital token slip | `queue.css`: High-contrast public TV theme (WCAG AAA), active token pulse animation, audio wave visualization | `useQueue` & `usePolling` hooks, `queue.controller.js`, `queue.service.js`, atomic token sequence generator | `queue_engine.py`: Multi-server ($M/M/c$) Erlang-C wait-time math, dynamic priority aging offsets, Pytest suite |
 | **Person C**<br>**Chinmaya** | **Platform, Auth & Regional View** | App shell (`header`, `nav`, sidebar drawer), login & lockout alert banners, patient intake form, city comparison tiles | `tokens.css`, `layout.css`, `forms.css`: Root design tokens, responsive app shell, accessible inputs, login shake animation | `useAuth` hook, Express 9-stage middleware pipeline (`app.js`), `auth.controller.js` (Argon2id + JWT), `patient.controller.js`, idempotency replay | `city_analytics.py`: City Healthcare Strain Index (HSI), optimal referral recommendation routing, Pytest suite |
 
-> 📄 For the detailed line-by-line file breakdown and commit audit standards, refer to [Equal Work Distribution Matrix](documentation/EQUAL_WORK_DISTRIBUTION.md).
+> 📄 For the detailed line-by-line file breakdown and commit audit standards, refer to [Project Proposal & Equal Work Distribution](documentation/Hospital_Management_System_Proposal.md) and [10-Day Build Plan](documentation/Hospital_Queue_Bed_Management_10_Day_Build_Plan.md).
 
 ---
 
@@ -99,9 +99,9 @@ ap-project/
 │       ├── 003_queue_core.sql
 │       └── 004_roles_and_rls.sql
 └── documentation/                 # Technical documentation & project deliverables
-    ├── EQUAL_WORK_DISTRIBUTION.md # 33.3% equal work division specifications
-    ├── Hospital_Management_System_Proposal.md # Full project proposal & DFDs
+    ├── Hospital_Management_System_Proposal.md # Full project proposal & equal work matrix
     ├── Hospital_Queue_Bed_Management_10_Day_Build_Plan.md # 10-day execution timeline
+    ├── Hospital_Management_System_Complete_Specification.pdf # Complete PDF document
     └── er_diagram.svg             # Entity-Relationship diagram
 ```
 
