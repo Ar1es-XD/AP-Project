@@ -1,63 +1,70 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-/**
- * usePolling Hook
- * Periodically executes an asynchronous fetcher function at a specified interval.
- * Features an `isStale` fallback flag so hospital screens never go completely blank
- * if a single network request drops.
- *
- * @param {Function} fetcherFn - Async function returning data
- * @param {number} intervalMs - Polling interval in milliseconds (default: 5000ms / 5s)
- * @param {boolean} enabled - Toggle flag to pause/resume polling
- */
-export function usePolling(fetcherFn, intervalMs = 5000, enabled = true) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isStale, setIsStale] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(null);
+//  In a hospital OPD or ICU, data changes constantly: new patients take tokens, doctors finish consultations, beds become dirty or available.
 
-  // Store the latest fetcherFn in a ref to prevent interval recreation on re-renders
-  const fetcherRef = useRef(fetcherFn);
-  fetcherRef.current = fetcherFn;
+// If we don't refresh the page, doctors and patients would be looking at outdated numbers. usePolling.js is an automatic timer hook. It calls a fetch function every 5 seconds.
 
-}
+// Most importantly, it has an isStale safety feature: if the hospital Wi-Fi drops for 3 seconds, instead of crashing the screen or showing a blank page, it keeps the existing queue on screen and flags it as "stale" (cached) so doctors can keep working!
 
-const executePoll = useCallback(async () => {
+
+export function usePolling(fetchFunction, intervalMs = 5000, isEnabled = true) {
+  // 1. Five state variables to track everything the screen needs to know
+  const [data, setData] = useState(null);               // The latest successful data
+  const [error, setError] = useState(null);             // Any error message if something broke
+  const [isLoading, setIsLoading] = useState(true);     // True only on the very first load
+  const [isStale, setIsStale] = useState(false);         // True if the latest background refresh failed
+  const [lastUpdated, setLastUpdated] = useState(null); // Timestamp of the last successful update
+
+  // 2. In React, every time a screen updates, functions get recreated. If we passed fetchFunction directly to useEffect, the interval timer would cancel and restart hundreds of times a second (a polling storm). useRef locks the timer in place so it ticks smoothly every 5 seconds.
+  const fetchFunctionRef = useRef(fetchFunction);
+  fetchFunctionRef.current = fetchFunction;
+
+  // 3. Defines the async function that runs the network call. Wrapped in useCallback so its reference never changes unnecessarily.
+  const executePoll = useCallback(async () => {
     try {
-      const result = await fetcherRef.current();
+      // Call the fetch function
+      const result = await fetchFunctionRef.current();
+
+      // We got fresh data! Update state and clear errors
       setData(result);
       setError(null);
       setIsStale(false);
       setLastUpdated(new Date());
     } catch (err) {
+      // A poll failed (maybe temporary hospital Wi-Fi jitter)
       setError(err);
-      // Resilience rule: if previous data exists, keep it on screen but mark it stale
+
+      // CLINICAL SAFETY RULE: Do NOT wipe the screen!
+      // Keep showing the old data, but mark it as stale so the UI can show a warning
       setIsStale(true);
     } finally {
+      // The initial load is done
       setIsLoading(false);
     }
   }, []);
 
-
+  // 4. Setup the timer when the component appears, and clean it up when it leaves
   useEffect(() => {
-    if (!enabled) return;
+    // If polling is disabled, do nothing
+    if (!isEnabled) return;
 
-    // Execute immediately on component mount
+    // Run once immediately so the user doesn't wait 5 seconds to see data
     executePoll();
 
-    // Setup periodic polling interval
+    // Set a recurring timer to run every intervalMs (5 seconds)
     const timerId = setInterval(executePoll, intervalMs);
 
-    // Clean up timer on unmount or when dependencies change to avoid memory leaks
+    // CLEANUP: When the doctor leaves the page, destroy the timer to prevent memory leaks
     return () => clearInterval(timerId);
-  }, [intervalMs, enabled, executePoll]);
+  }, [intervalMs, isEnabled, executePoll]);
 
+  // 5. Return everything the UI needs
   return {
     data,
     error,
     isLoading,
     isStale,
     lastUpdated,
-    refetch: executePoll,
+    refetch: executePoll, // We return executePoll under the name refetch. This gives the UI a simple button: <button onClick={refetch}>Refresh Now</button>.
   };
+}
