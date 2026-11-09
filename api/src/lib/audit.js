@@ -9,7 +9,7 @@ export async function logAudit({
     after = null ,
     requestId  = null,
     client = null,
-})
+}){
 if(!action || !entityType || !entityId){
     throw new Error('logAudir requires action, entityType and entityId');
 }
@@ -22,9 +22,23 @@ entity_type,
 entity_id,
 before,
 after,
-request_id,
+request_id
 ) VALUES ($1 , $2,$3,$4,$5,$6,$7,$8)
- RETURNING audit_id,at:
+ RETURNING audit_id,at;
 `;
 
-const params 
+const params = [
+    actorUserId,
+    hospitalId,
+    action,
+    entityType,
+    String(entityId),
+    before ? JSON.stringify(before) : null,
+    after ? JSON.stringify(after) :null,
+    requestId
+];
+
+const executor = client ? client.query.bind(client) : query;
+const result = await executor(sql,params);
+return result.rows[0];
+}
