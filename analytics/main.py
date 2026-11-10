@@ -9,7 +9,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-INTERNAL_SHARED_SECRET = os.getenv("ANALYTICS_SHARED_SECRET", "super-secret-internal-key")
+INTERNAL_SHARED_SECRET = os.getenv("ANALYTICS_SHARED_SECRET")
+if not INTERNAL_SHARED_SECRET:
+    
+    INTERNAL_SHARED_SECRET = os.getenv("ANALYTICS_SECRET", "dev-local-secret-change-in-prod")
 
 
 def verify_shared_secret(x_internal_secret: Optional[str] = Header(None)):
@@ -18,12 +21,12 @@ def verify_shared_secret(x_internal_secret: Optional[str] = Header(None)):
     
     if not x_internal_secret or x_internal_secret != INTERNAL_SHARED_SECRET:
         raise HTTPException(
-            status_code=status.HTTP_403_UNAUTHORIZED,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized: Invalid or missing internal shared secret."
         )
 
 class EstimateRequest(BaseModel):
-    deparment_id: str
+    department_id: str
     active_doctors: int = Field(..., ge=0, description="Active doctors (c)")
     arrival_rate: float = Field(..., ge=0, description="Arrivals per hour (lambda)")
     service_rate: float = Field(..., gt=0, description="Service per doctor per hour (mu)")
@@ -69,13 +72,22 @@ def estimate_wait_time(
     count = payload.active_doctors
     lam = payload.arrival_rate
     mu = payload.service_rate
-    rho = lam / (count * mu) if (count * mu) > 0 else 1.0
     
+    if count == 0:
+        return EstimateResponse(
+            department_id=payload.department_id,
+            expected_wait_minutes_min=-1,
+            expected_wait_minutes_max=-1,
+            probability_of_wait=1.0,
+            system_utilization=1.0,
+            status="UNAVAILABLE_ZERO_DOCTORS"
+        )
+    rho = lam / (count * mu)
     
     
     return EstimateResponse(
-        deparment_id=payload.deparment_id,
-        expected_wait_minutes_main=10,
+        department_id=payload.department_id,
+        expected_wait_minutes_min=10,
         expected_wait_minutes_max=20,
         probability_of_wait=round(min(1.0, rho), 4),
         system_utilization=round(rho, 4),

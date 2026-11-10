@@ -78,10 +78,11 @@ create table doctor_session(
 
 create index idx_doctor_session_live on doctor_session(department_id, status) where status = 'ACTIVE';
 
+-- Consultation log: Clinical retention rule (ON DELETE RESTRICT prevents accidental deletion of audit history)
 create table consultation_log(
     log_id bigint generated always as identity primary key,
-    entry_id uuid not null references queue_entry(entry_id) on delete cascade,
-    doctor_id uuid not null references app_user(user_id) on delete cascade,
+    entry_id uuid not null references queue_entry(entry_id) on delete restrict,
+    doctor_id uuid not null references app_user(user_id) on delete restrict,
     started_at timestamptz not null,
     ended_at timestamptz not null,
     duration_seconds int not null,
