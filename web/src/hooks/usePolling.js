@@ -15,10 +15,11 @@ export function usePolling(fetchFunction, intervalMs = 5000, isEnabled = true) {
   const [isStale, setIsStale] = useState(false);         // True if the latest background refresh failed
   const [lastUpdated, setLastUpdated] = useState(null); // Timestamp of the last successful update
 
-  // 2. In React, every time a screen updates, functions get recreated. If we passed fetchFunction directly to useEffect, the interval timer would cancel and restart hundreds of times a second (a polling storm). useRef locks the timer in place so it ticks smoothly every 5 seconds.
   const fetchFunctionRef = useRef(fetchFunction);
-  fetchFunctionRef.current = fetchFunction;
-
+  // Update ref inside an effect to support React 18 concurrent rendering cleanly
+  useEffect(() => {
+    fetchFunctionRef.current = fetchFunction;
+  }, [fetchFunction]);
   // 3. Defines the async function that runs the network call. Wrapped in useCallback so its reference never changes unnecessarily.
   const executePoll = useCallback(async () => {
     try {

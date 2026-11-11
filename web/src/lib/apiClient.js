@@ -31,7 +31,7 @@ export async function apiClient(endpoint, options = {}) {
   const requestConfig = {
     method,
     headers: defaultHeaders,
-    ...otherSettings,
+    ...customConfig,
   };
 
   // Automatically stringify JSON body if present
