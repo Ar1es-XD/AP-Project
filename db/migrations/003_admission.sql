@@ -5,7 +5,7 @@ ADD CONSTRAINT uq_patient_id_hospital UNIQUE (patient_id, hospital_id);
 CREATE TABLE IF NOT EXISTS admission (
   admission_id        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   hospital_id         uuid NOT NULL REFERENCES hospital(hospital_id) ON DELETE CASCADE,
-  patient_id          uuid NOT NULL REFERENCES patient(patient_id) ON DELETE CASCADE,
+  patient_id          uuid NOT NULL,
   status              text NOT NULL DEFAULT 'ACTIVE'
                       CHECK (status IN ('ACTIVE', 'DISCHARGED', 'TRANSFERRED', 'CANCELLED')),
   admitted_at         timestamptz NOT NULL DEFAULT now(),
@@ -14,7 +14,12 @@ CREATE TABLE IF NOT EXISTS admission (
   discharged_by       uuid REFERENCES app_user(user_id) ON DELETE SET NULL,
   notes               text,
   created_at          timestamptz NOT NULL DEFAULT now(),
-  updated_at          timestamptz NOT NULL DEFAULT now()
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT admission_patient_matches_hospital
+    FOREIGN KEY (patient_id, hospital_id)
+    REFERENCES patient(patient_id, hospital_id)
+    ON DELETE RESTRICT
 );
 
 -- Partial unique index: only one active admission per patient at a time
