@@ -1,4 +1,6 @@
 -- Up Migration
+ALTER TABLE patient
+ADD CONSTRAINT uq_patient_id_hospital UNIQUE (patient_id, hospital_id);
 
 CREATE TABLE IF NOT EXISTS admission (
   admission_id        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -60,3 +62,4 @@ LEFT JOIN admission a
 DROP VIEW IF EXISTS v_bed_current;
 ALTER TABLE bed_assignment DROP CONSTRAINT IF EXISTS fk_bed_assignment_admission;
 DROP TABLE IF EXISTS admission;
+ALTER TABLE patient DROP CONSTRAINT IF EXISTS uq_patient_id_hospital;
