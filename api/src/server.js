@@ -1,12 +1,15 @@
 import 'dotenv/config';
-import {app} from './app.js';
-const PORT = process.env.PORT || 4000 ;
-const server = app.listen(PORT, ()=>{
+import { startReservationSweeper, stopReservationSweeper } from './services/reservationSweeper.js';
+import { app } from './app.js';
+const PORT = process.env.PORT || 4000;
+const server = app.listen(PORT, () => {
     console.log(`Server listening on http://localhost:${PORT}`);
+    startReservationSweeper();
 });
 // used to shutdown the server based on "https://dev.to/yusadolat/nodejs-graceful-shutdown-a-beginners-guide-40b6"
 const gracefulShutdown = (signal) => {
     console.log(`Received ${signal}, shutting down gracefully...`);
+    stopReservationSweeper();
     const forceCloserTimer = setTimeout(() => {
         console.error('Graceful shutdown timed out after 10s, forcing shutdown.');
         server.closeAllConnections();
