@@ -1,5 +1,6 @@
 -- Up Migration
 
+
 CREATE TABLE waitlist (
   waitlist_id       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   hospital_id       uuid NOT NULL REFERENCES hospital(hospital_id) ON DELETE CASCADE,
@@ -9,7 +10,7 @@ CREATE TABLE waitlist (
   status            text NOT NULL DEFAULT 'WAITING'
                     CHECK (status IN ('WAITING', 'ASSIGNED', 'CANCELLED')),
   requested_at      timestamptz NOT NULL DEFAULT now(),
-  requested_by      uuid REFERENCES app_user(user_id) ON DELETE SET NULL,
+  requested_by      uuid REFERENCES app_user(user_id) ON DELETE SET NULL, 
   assigned_at       timestamptz,
   assigned_bed_id   uuid REFERENCES bed(bed_id) ON DELETE SET NULL,
   notes             text
