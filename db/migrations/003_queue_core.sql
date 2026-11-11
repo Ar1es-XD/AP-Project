@@ -86,6 +86,8 @@ create table consultation_log(
     started_at timestamptz not null,
     ended_at timestamptz not null,
     duration_seconds int not null,
+    constraint ck_consultation_interval
+        check (ended_at >= started_at and duration_seconds >= 0),
     created_at timestamptz not null default now()
 );
 
