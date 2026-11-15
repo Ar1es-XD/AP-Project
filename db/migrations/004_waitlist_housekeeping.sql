@@ -38,3 +38,4 @@ CREATE INDEX housekeeping_bed_idx ON housekeeping_task (bed_id);
 
 DROP TABLE IF EXISTS housekeeping_task;
 DROP TABLE IF EXISTS waitlist;
+-- PR placeholder added by person-a
