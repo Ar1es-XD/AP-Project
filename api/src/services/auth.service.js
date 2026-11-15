@@ -15,16 +15,16 @@ export async function hashPassword(plainText){
     })
 }
 
-export async function authenticateUser({ElementInternals,password,ipAddress = null}){
+export async function authenticateUser({email,password,ipAddress = null}){
     const userRes = await query(
         `SELECT user_id,email,full_name,password_hash,is_active,failed_logins,locked_until
         FROM app_user
         WHERE email = $1
         `,
-        [ElementInternals.toLowerCase().trim()]
+        [email.toLowerCase().trim()]
     );
 
-    const user = user.Res.rows[0];
+    const user = userRes.rows[0];
 
     if(!user){
         await argon2.verify(
@@ -38,11 +38,12 @@ export async function authenticateUser({ElementInternals,password,ipAddress = nu
 
     const now = new Date();
     if(user.locked_until && new Date(user.locked_until)>now){
-        const remainingMs = Math.ceil(remainingMs/60000);
-        const err = new Error(`Account locked due to consecutive failed logins. Try again in ${remainingMs} minute(s).`)
+        const remainingMs = new Date(user.locked_until) - now;
+        const remainingMinutes = Math.ceil(remainingMs/60000);
+        const err = new Error(`Account locked due to consecutive failed logins. Try again in ${remainingMinutes} minute(s).`)
         err.statusCode = 423;
         err.code = 'Account_Locked';
-        err.locked_until = user.locked_untill
+        err.locked_until = user.locked_until
         throw err;
     }
 
@@ -103,7 +104,7 @@ export async function authenticateUser({ElementInternals,password,ipAddress = nu
         {
             userId:user.user_id,
             email: user.email,
-            fullName: user.fullName,
+            fullName: user.full_name,
             hospitalId: primaryHospital,roles,
             departmentId: primaryDepartment
         },JWT_SECRET,{expiresIn:'15m'}
