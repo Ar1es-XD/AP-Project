@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || 
+'dev-secret-key-must-be-long-enough-32-chars';
 if(!JWT_SECRET) {
     throw new Error('JWT_SECRET environment variable is required');
 }
@@ -27,7 +28,7 @@ try{
     next();
 }catch(err){
     return res.status(401).json({
-        error:{code: ' Invalid_Token',message:'Token is invalid or expired'}
+        error:{code: 'Invalid_Token',message:'Token is invalid or expired'}
     });
 }
 };
@@ -36,7 +37,7 @@ export const requireRole = (...allowedRoles) =>{
     return (req,res,next) => {
         if(!req.user || !req.user.roles || !Array.isArray(req.user.roles)){
             return res.status(403).json({
-                error:{code:'Forbidden',messgae:`Requires one of roles:${allowedRoles.join(',')}`}
+                error:{code:'Forbidden',message:`Requires one of roles:${allowedRoles.join(',')}`}
             });
         }
         const hasRole = req.user.roles.some((role) => allowedRoles.includes(role));
@@ -52,7 +53,7 @@ export const requireRole = (...allowedRoles) =>{
 export const requireHospital = (req,res,next) => {
     const targetHospitalId = req.params.hospitalId || req.query.hospitalId || req.body?.hospital_id;
     if(targetHospitalId && req.user?.hospitalId && req.user.hospitalId !== targetHospitalId){
-        if(!req.user.roles.invludes('CITY_VIEWER')){
+        if(!req.user.roles.includes('CITY_VIEWER')){
             return res.status(403).json({
                 error:{code:"Cross_Hospital_Forbidden",message:"Access denied: Tenant isolation policy"}
             });
