@@ -113,3 +113,69 @@ Retrieves active departmental queue metrics and the real-time list of waiting pa
 
 * **Error Responses:**
   - `404 Not Found`: Queue ID does not exist or belongs to another hospital tenant.
+
+
+### 2.3. Call Next Patient (Priority Aging + CAS)
+Doctor calls the next patient in line. Uses the dynamic priority aging formula to calculate the highest-priority waiting patient and executes an atomic Compare-and-Swap (CAS) update (`WHERE status = 'WAITING'`) to eliminate double-calling race conditions.
+
+* **Method:** `POST`
+* **Path:** `/api/v1/queues/call-next`
+* **Access Control:** `DOCTOR`, `HOSPITAL_ADMIN`
+* **Headers:**
+  - `Content-Type: application/json`
+  - `Authorization: Bearer <token>`
+* **Request Body:**
+```json
+{
+  "department_id": "c7a8b9e0-3d21-4f56-8a90-123456789abc",
+  "room_number": "Room 102"
+}
+```
+* **Success Response (200 OK):**
+```json
+{
+  "message": "Patient called successfully",
+  "called_patient": {
+    "entry_id": "8e3b1c67-9d45-421a-b678-0123456789de",
+    "token_number": 14,
+    "token_display": "CARD-014",
+    "priority": "ROUTINE",
+    "status": "CALLED",
+    "called_at": "2026-11-28T09:15:00.000Z"
+  },
+  "room_number": "Room 102"
+}
+```
+
+---
+
+### 2.4. Clinical State Machine Transitions
+Transitions a patient ticket through the clinical workflow:
+- `START_CONSULTATION`: Patient enters room, starts timer.
+- `COMPLETE`: Finishes consultation, automatically inserts into `consultation_log` with computed duration.
+- `NO_SHOW`: Patient was called but never showed up.
+- `HOLD`: Patient sent for immediate diagnostic test (X-ray, ECG, blood work).
+
+* **Method:** `POST`
+* **Path:** `/api/v1/queues/entries/:id/transition`
+* **Access Control:** `DOCTOR`, `NURSE`, `HOSPITAL_ADMIN`
+* **Headers:**
+  - `Content-Type: application/json`
+  - `Authorization: Bearer <token>`
+* **Request Body:**
+```json
+{
+  "action": "START_CONSULTATION"
+}
+```
+* **Success Response (200 OK):**
+```json
+{
+  "message": "Status transitioned successfully to IN_CONSULTATION",
+  "entry": {
+    "entry_id": "8e3b1c67-9d45-421a-b678-0123456789de",
+    "status": "IN_CONSULTATION",
+    "consultation_start_at": "2026-11-28T09:20:00.000Z"
+  }
+}
+```

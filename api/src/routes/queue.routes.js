@@ -8,7 +8,7 @@ export const queueRouter = Router();
 // Protect all queue routes with JWT auth
 queueRouter.use(authGuard);
 
-// POST /api/v1/queues/join: Front desk, nurses, and doctors can issue a token
+// 1. Join queue: Receptionists, Nurses, Doctors
 queueRouter.post(
   '/join',
   requireRole('FRONT_DESK', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN'),
@@ -16,7 +16,21 @@ queueRouter.post(
   queueController.joinQueue
 );
 
-// GET /api/v1/queues/:id: View active queue details and waiting list
+// 2. Call next patient: Doctor only (with Priority Aging and CAS)
+queueRouter.post(
+  '/call-next',
+  requireRole('DOCTOR', 'HOSPITAL_ADMIN'),
+  queueController.callNext
+);
+
+// 3. Clinical state transitions: START_CONSULTATION, COMPLETE, NO_SHOW, HOLD
+queueRouter.post(
+  '/entries/:id/transition',
+  requireRole('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  queueController.transitionStatus
+);
+
+// 4. View active queue status by ID
 queueRouter.get(
   '/:id',
   queueController.getQueue
