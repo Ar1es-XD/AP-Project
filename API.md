@@ -66,6 +66,7 @@ Allows authorized hospital staff (front desk reception, triage nurse, or doctor)
   - `400 Bad Request`: Validation failure (non-UUID ID, invalid priority) or queue is `CLOSED` for new walk-ins.
   - `401 Unauthorized`: Missing, expired, or invalid JWT token.
   - `403 Forbidden`: User lacks required clinical or administrative role.
+  - `404 Not Found` (`DEPARTMENT_NOT_FOUND`): Department does not exist in the caller's hospital.
 
 ---
 

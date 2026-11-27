@@ -34,10 +34,14 @@ app.use((req, res) => {
 // Centralized error handler
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || err.status || 500;
+  const isServerError = statusCode >= 500;
+  if (isServerError) {
+    console.error(err);
+  }
   res.status(statusCode).json({
     error: {
-      code: err.code || (statusCode >= 500 ? 'Internal_Error' : 'Bad_Request'),
-      message: err.message || 'Internal Server Error',
+      code: isServerError ? 'Internal_Error' : (err.code || 'Bad_Request'),
+      message: isServerError ? 'Internal Server Error' : (err.message || 'Internal Server Error'),
     },
   });
 });

@@ -15,30 +15,38 @@ export async function joinQueue({ hospital_id, department_id, patient_id, priori
   try {
     await client.query('BEGIN');
 
-    // 1. Fetch or create the OPD Queue session for today
-    let queueRes = await client.query(
-      `SELECT queue_id, status FROM opd_queue 
-       WHERE department_id = $1 AND queue_date = $2`,
-      [department_id, today]
+    const deptRes = await client.query(
+      `SELECT name FROM department WHERE department_id = $1 AND hospital_id = $2`,
+      [department_id, hospital_id]
     );
+    if (deptRes.rows.length === 0) {
+      const error = new Error('Department not found');
+      error.statusCode = 404;
+      error.code = 'DEPARTMENT_NOT_FOUND';
+      throw error;
+    }
 
-    let queueId;
-    if (queueRes.rows.length === 0) {
-      // Create new queue for today if not already open
-      const newQueue = await client.query(
-        `INSERT INTO opd_queue (hospital_id, department_id, queue_date, status)
-         VALUES ($1, $2, $3, 'OPEN')
-         RETURNING queue_id, status`,
-        [hospital_id, department_id, today]
-      );
-      queueId = newQueue.rows[0].queue_id;
-    } else {
-      if (queueRes.rows[0].status === 'CLOSED') {
-        const error = new Error('Queue is currently closed for new registrations today');
-        error.statusCode = 400;
-        throw error;
-      }
-      queueId = queueRes.rows[0].queue_id;
+    // 1. Create today's queue if needed, then read it in a separate statement
+    // so a concurrently committed queue is visible.
+    await client.query(
+      `INSERT INTO opd_queue (hospital_id, department_id, queue_date, status)
+       VALUES ($1, $2, $3, 'OPEN')
+       ON CONFLICT (department_id, queue_date) DO NOTHING`,
+      [hospital_id, department_id, today]
+    );
+    const queueRes = await client.query(
+      `SELECT queue_id, status FROM opd_queue
+       WHERE hospital_id = $1 AND department_id = $2 AND queue_date = $3`,
+      [hospital_id, department_id, today]
+    );
+    const queue = queueRes.rows[0];
+    if (!queue) {
+      throw new Error('Daily queue is missing after creation for the requested hospital');
+    }
+    if (queue.status === 'CLOSED') {
+      const error = new Error('Queue is currently closed for new registrations today');
+      error.statusCode = 400;
+      throw error;
     }
 
     // 2. Atomic Token Counter Increment
@@ -56,11 +64,7 @@ export async function joinQueue({ hospital_id, department_id, patient_id, priori
 
     const tokenNumber = counterRes.rows[0].current_token;
 
-    // 3. Fetch Department name for human-friendly token display (e.g. CARD-001)
-    const deptRes = await client.query(
-      `SELECT name FROM department WHERE department_id = $1`,
-      [department_id]
-    );
+    // 3. Format the token using the verified department name (e.g. CARD-001)
     const deptPrefix = deptRes.rows[0]?.name ? deptRes.rows[0].name.substring(0, 4).toUpperCase() : 'OPD';
     const tokenDisplay = `${deptPrefix}-${String(tokenNumber).padStart(3, '0')}`;
 
@@ -71,7 +75,7 @@ export async function joinQueue({ hospital_id, department_id, patient_id, priori
          token_number, token_display, priority, status
        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'WAITING')
        RETURNING *`,
-      [queueId, patient_id, hospital_id, department_id, tokenNumber, tokenDisplay, priority]
+      [queue.queue_id, patient_id, hospital_id, department_id, tokenNumber, tokenDisplay, priority]
     );
 
     await client.query('COMMIT');

@@ -18,7 +18,7 @@ export const validateBody = (schema) => (req, res, next) => {
       error: {
         code: 'VALIDATION_ERROR',
         message: 'Invalid request payload',
-        details: result.error.errors.map((e) => ({
+        details: result.error.issues.map((e) => ({
           field: e.path.join('.'),
           message: e.message,
         })),
