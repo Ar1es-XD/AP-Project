@@ -11,3 +11,5 @@ node_modules/
 .DS_Store
 dist/
 mywork.pdf
+__pycache__/
+*.py[cod]
