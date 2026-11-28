@@ -3,6 +3,9 @@ Tests for Inpatient Bed Analytics Engine
 Author: Person A (Ishika)
 """
 
+import os
+os.environ.setdefault("ANALYTICS_SHARED_SECRET", "test-secret")
+
 from fastapi.testclient import TestClient
 from main import app
 from core.bed_analytics import calculate_turnover, forecast_depletion
