@@ -107,3 +107,9 @@ def estimate_wait_time(payload: EstimateRequest):
         system_utilization=round(min(1.0, rho), 4),
         status="STUB_SUCCESS"
     )
+
+try:
+    from routers.bed_router import router as bed_router
+    app.include_router(bed_router)
+except ImportError:
+    pass

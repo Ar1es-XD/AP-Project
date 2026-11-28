@@ -1,8 +1,7 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 
-'dev-secret-key-must-be-long-enough-32-chars';
-if(!JWT_SECRET) {
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || !JWT_SECRET.trim()) {
     throw new Error('JWT_SECRET environment variable is required');
 }
 
